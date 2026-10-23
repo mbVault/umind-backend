@@ -1,0 +1,26 @@
+# Node modules & build artifacts
+node_modules/
+dist/
+build/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor & OS files
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Coverage & test output
+coverage/
+.nyc_output/
+
+# Prisma artifacts (optional if custom schema outputs)
+# generated/

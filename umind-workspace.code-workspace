@@ -1,0 +1,13 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../umind-mobileApp"
+        },
+        {
+            "path": "../umind-web"
+        }
+    ]
+}

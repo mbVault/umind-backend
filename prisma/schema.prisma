@@ -1,0 +1,498 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  DELETED
+}
+
+enum LifeStage {
+  GROWING_UP // 12–19
+  STARTING_OUT // 20–30
+  BUILDING // 30–45
+  SHIFTING // 45–60
+  WISDOM_YEARS // 60+
+}
+
+enum Gender {
+  WOMAN
+  MAN
+  PREFER_NOT_TO_SAY
+}
+
+enum StartingFeeling {
+  STRESSED
+  ANXIOUS
+  GHABRAHAT
+  LOW
+  CANT_SLEEP
+  LONELY
+}
+
+enum AppTheme {
+  LAVENDER
+  OCEAN
+  FOREST
+  SUNSET
+  ROSE
+}
+
+enum SaathiCheckInTime {
+  MORNING
+  AFTERNOON
+  EVENING
+  BEFORE_BED
+  ONLY_WHEN_I_OPEN
+}
+
+enum SaathiLanguage {
+  HINDI
+  ENGLISH
+  HINGLISH
+}
+
+enum UnwindHabit {
+  BREATHING
+  WALKING
+  TALKING_IT_OUT
+  CALM_SOUNDS
+  WRITING
+  AYURVEDA_ROUTINES
+}
+
+model User {
+  id                  String            @id @default(uuid()) @db.Uuid
+  alias               String            @db.VarChar(20)
+  avatarId            String            @db.VarChar(50)
+  lifeStage           LifeStage
+  gender              Gender
+  startingFeelings    StartingFeeling[]
+  appTheme            AppTheme          @default(LAVENDER)
+  city                String            @default("") @db.VarChar(100)
+  saathiCheckIn       SaathiCheckInTime
+  saathiLanguage      SaathiLanguage
+  unwindHabits        UnwindHabit[]
+  recoveryKeyVerifier String            @db.Text
+  status              UserStatus        @default(ACTIVE)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?         @db.Timestamptz(6)
+
+  deviceRegistrations UserDevice[]
+  sessions            AuthSession[]
+}
+
+model Device {
+  id         String    @id @default(uuid()) @db.Uuid
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenAt DateTime? @db.Timestamptz(6)
+
+  registrations UserDevice[]
+}
+
+model UserDevice {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  deviceId     String    @db.Uuid
+  registeredAt DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt   DateTime? @db.Timestamptz(6)
+  revokedAt    DateTime? @db.Timestamptz(6)
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  device   Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessions AuthSession[]
+
+  @@unique([id, userId])
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([deviceId])
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  userDeviceId     String?   @db.Uuid
+  refreshTokenHash String    @unique @db.Text
+  expiresAt        DateTime  @db.Timestamptz(6)
+  revokedAt        DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt       DateTime? @db.Timestamptz(6)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  userDevice UserDevice? @relation(fields: [userDeviceId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([userDeviceId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Staff identity (psychologists + admins) — SuperTokens-backed, separate from
+// anonymous client User / AuthSession above.
+// ---------------------------------------------------------------------------
+
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+  DELETED
+}
+
+enum StaffRole {
+  PSYCHOLOGIST
+  ADMIN
+}
+
+enum ProfileVisibilityMode {
+  REAL_NAME_AND_PHOTO
+  DISPLAY_NAME_AND_AVATAR
+}
+
+enum PsychologistPublicationStatus {
+  NOT_SUBMITTED
+  PENDING_VERIFICATION
+  VERIFIED_UNPUBLISHED
+  LIVE
+  NEEDS_ATTENTION
+}
+
+enum PsychologistAccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum PsychologistOnboardingStep {
+  APPLY
+  PROFILE
+  DOCUMENTS
+  BACKGROUND_CHECK
+  HOURS
+  COMPLETE
+}
+
+enum SpecialisationCode {
+  STRESS
+  ANXIETY
+  SLEEP
+  BURNOUT
+  RELATIONSHIPS
+  TEENS
+  WOMENS_HEALTH
+  GRIEF
+}
+
+enum LanguageCode {
+  HINDI
+  ENGLISH
+  MARATHI
+  PUNJABI
+  TAMIL
+}
+
+enum IdDocumentType {
+  AADHAAR
+  PAN
+  PASSPORT
+  DRIVING_LICENCE
+}
+
+enum PsychologistDocumentKind {
+  ID_FRONT
+  ID_BACK
+  LIVE_SELFIE
+  PASSPORT_PHOTO
+  DEGREE_CERTIFICATE
+  RCI_CERTIFICATE
+  EXPERIENCE_LETTER
+}
+
+enum DocumentStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  REPLACED
+  REJECTED_NEED_REUPLOAD
+}
+
+enum VerificationCheckType {
+  IDENTITY
+  RCI_REGISTRATION
+  DEGREE
+  YEARS_OF_EXPERIENCE
+}
+
+enum VerificationCheckStatus {
+  QUEUED
+  IN_PROGRESS
+  VERIFIED
+  NEEDS_ATTENTION
+}
+
+enum AdminMembershipStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+enum AdminRoleCode {
+  FOUNDER_SUPER_ADMIN
+  VERIFICATION_OFFICER
+  SAFETY_LEAD
+  FINANCE
+  CONTENT_EDITOR
+}
+
+enum AdminInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum AuditActorType {
+  ADMIN
+  SYSTEM
+}
+
+model Account {
+  id                String        @id @default(uuid()) @db.Uuid
+  superTokensUserId String        @unique @db.VarChar(128)
+  email             String?       @db.VarChar(320)
+  status            AccountStatus @default(ACTIVE)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?     @db.Timestamptz(6)
+
+  roles                  AccountRole[]
+  psychologistProfile    PsychologistProfile?
+  adminMembership        AdminMembership?
+  uploadedDocuments      PsychologistDocument[]       @relation("DocumentUploader")
+  reviewedChecks         PsychologistVerificationCheck[] @relation("CheckReviewer")
+  invitationsSent         AdminInvitation[]             @relation("InvitationInviter")
+  invitationsAccepted     AdminInvitation[]             @relation("InvitationAcceptor")
+  auditLogs               AdminAuditLog[]               @relation("AuditActor")
+  membershipRolesAssigned AdminMembershipRole[]         @relation("MembershipRoleAssigner")
+  membershipsInvited      AdminMembership[]             @relation("MembershipInviter")
+
+  @@index([status])
+}
+
+model AccountRole {
+  id        String    @id @default(uuid()) @db.Uuid
+  accountId String    @db.Uuid
+  role      StaffRole
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, role])
+  @@index([role, accountId])
+}
+
+model PsychologistProfile {
+  id                     String                        @id @default(uuid()) @db.Uuid
+  accountId              String                        @unique @db.Uuid
+  legalFullName          String?                       @db.VarChar(120)
+  visibilityMode         ProfileVisibilityMode         @default(DISPLAY_NAME_AND_AVATAR)
+  displayName            String?                       @db.VarChar(80)
+  publicPhotoObjectKey   String?                       @db.VarChar(512)
+  avatarColor            String?                       @db.VarChar(16)
+  avatarInitials         String?                       @db.VarChar(4)
+  rciRegistrationNumber  String?                       @unique @db.VarChar(64)
+  highestDegree          String?                       @db.VarChar(120)
+  yearsPractising        Int?
+  idDocumentType         IdDocumentType?
+  aadhaarLast4           String?                       @db.Char(4)
+  onboardingStep         PsychologistOnboardingStep    @default(APPLY)
+  applicationSubmittedAt DateTime?                     @db.Timestamptz(6)
+  publicationStatus      PsychologistPublicationStatus @default(NOT_SUBMITTED)
+  accountStatus          PsychologistAccountStatus     @default(ACTIVE)
+  publishedAt            DateTime?                     @db.Timestamptz(6)
+  suspendedAt            DateTime?                     @db.Timestamptz(6)
+  suspensionReason       String?                       @db.VarChar(500)
+  createdAt              DateTime                      @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime                      @updatedAt @db.Timestamptz(6)
+
+  account         Account                       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  specialisations PsychologistSpecialisation[]
+  languages       PsychologistLanguage[]
+  documents       PsychologistDocument[]
+  checks          PsychologistVerificationCheck[]
+
+  @@index([publicationStatus])
+  @@index([accountStatus])
+  @@index([applicationSubmittedAt])
+}
+
+model PsychologistSpecialisation {
+  psychologistProfileId String             @db.Uuid
+  code                  SpecialisationCode
+
+  psychologist PsychologistProfile @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@id([psychologistProfileId, code])
+  @@index([code])
+}
+
+model PsychologistLanguage {
+  psychologistProfileId String       @db.Uuid
+  code                  LanguageCode
+
+  psychologist PsychologistProfile @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@id([psychologistProfileId, code])
+  @@index([code])
+}
+
+model PsychologistDocument {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  psychologistProfileId String                   @db.Uuid
+  kind                  PsychologistDocumentKind
+  storageObjectKey      String                   @unique @db.VarChar(512)
+  contentType           String                   @db.VarChar(100)
+  byteSize              Int
+  checksum              String?                  @db.Char(64)
+  status                DocumentStatus           @default(PENDING_UPLOAD)
+  uploadedAt            DateTime?                @db.Timestamptz(6)
+  replacedAt            DateTime?                @db.Timestamptz(6)
+  rejectionReason       String?                  @db.VarChar(500)
+  uploadedByAccountId   String?                  @db.Uuid
+  replacesDocumentId    String?                  @db.Uuid
+  createdAt             DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                 @updatedAt @db.Timestamptz(6)
+
+  psychologist   PsychologistProfile  @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+  uploadedBy     Account?             @relation("DocumentUploader", fields: [uploadedByAccountId], references: [id], onDelete: SetNull)
+  replaces       PsychologistDocument?  @relation("DocumentReplacement", fields: [replacesDocumentId], references: [id], onDelete: Restrict)
+  replacedBy     PsychologistDocument[] @relation("DocumentReplacement")
+
+  @@index([psychologistProfileId, kind])
+  @@index([status])
+}
+
+model PsychologistVerificationCheck {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  psychologistProfileId String                  @db.Uuid
+  type                  VerificationCheckType
+  status                VerificationCheckStatus @default(QUEUED)
+  reviewerAccountId     String?                 @db.Uuid
+  reason                String?                 @db.VarChar(1000)
+  reviewedAt            DateTime?               @db.Timestamptz(6)
+  createdAt             DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                @updatedAt @db.Timestamptz(6)
+
+  psychologist PsychologistProfile @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+  reviewer     Account?            @relation("CheckReviewer", fields: [reviewerAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([psychologistProfileId, type])
+  @@index([status, type])
+  @@index([psychologistProfileId, status])
+}
+
+model AdminMembership {
+  id                 String                @id @default(uuid()) @db.Uuid
+  accountId          String                @unique @db.Uuid
+  status             AdminMembershipStatus @default(ACTIVE)
+  invitedByAccountId String?               @db.Uuid
+  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
+  revokedAt          DateTime?             @db.Timestamptz(6)
+
+  account    Account               @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  invitedBy  Account?              @relation("MembershipInviter", fields: [invitedByAccountId], references: [id], onDelete: SetNull)
+  roles      AdminMembershipRole[]
+  invitation AdminInvitation?
+
+  @@index([status])
+}
+
+model AdminRole {
+  id        String        @id @default(uuid()) @db.Uuid
+  code      AdminRoleCode @unique
+  name      String        @db.VarChar(80)
+  createdAt DateTime      @default(now()) @db.Timestamptz(6)
+
+  memberships AdminMembershipRole[]
+  permissions AdminRolePermission[]
+}
+
+model AdminMembershipRole {
+  adminMembershipId   String   @db.Uuid
+  adminRoleId         String   @db.Uuid
+  assignedByAccountId String?  @db.Uuid
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+
+  membership AdminMembership @relation(fields: [adminMembershipId], references: [id], onDelete: Restrict)
+  role       AdminRole       @relation(fields: [adminRoleId], references: [id], onDelete: Restrict)
+  assignedBy Account?        @relation("MembershipRoleAssigner", fields: [assignedByAccountId], references: [id], onDelete: SetNull)
+
+  @@id([adminMembershipId, adminRoleId])
+}
+
+model AdminPermission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(80)
+  description String? @db.VarChar(255)
+
+  roles AdminRolePermission[]
+}
+
+model AdminRolePermission {
+  adminRoleId       String @db.Uuid
+  adminPermissionId String @db.Uuid
+
+  role       AdminRole       @relation(fields: [adminRoleId], references: [id], onDelete: Restrict)
+  permission AdminPermission @relation(fields: [adminPermissionId], references: [id], onDelete: Restrict)
+
+  @@id([adminRoleId, adminPermissionId])
+}
+
+model AdminInvitation {
+  id                    String                @id @default(uuid()) @db.Uuid
+  email                 String                @db.VarChar(320)
+  tokenHash             String                @unique @db.Text
+  status                AdminInvitationStatus @default(PENDING)
+  invitedByAccountId    String                @db.Uuid
+  roleCodes             AdminRoleCode[]
+  expiresAt             DateTime              @db.Timestamptz(6)
+  acceptedAt            DateTime?             @db.Timestamptz(6)
+  acceptedByAccountId   String?               @db.Uuid
+  revokedAt             DateTime?             @db.Timestamptz(6)
+  resultingMembershipId String?               @unique @db.Uuid
+  createdAt             DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime              @updatedAt @db.Timestamptz(6)
+
+  invitedBy           Account          @relation("InvitationInviter", fields: [invitedByAccountId], references: [id], onDelete: Restrict)
+  acceptedBy          Account?         @relation("InvitationAcceptor", fields: [acceptedByAccountId], references: [id], onDelete: SetNull)
+  resultingMembership AdminMembership? @relation(fields: [resultingMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([email, status])
+  @@index([status, expiresAt])
+  @@index([invitedByAccountId])
+}
+
+model AdminAuditLog {
+  id             String         @id @default(uuid()) @db.Uuid
+  actorAccountId String?        @db.Uuid
+  actorType      AuditActorType
+  action         String         @db.VarChar(80)
+  targetType     String         @db.VarChar(64)
+  targetId       String?        @db.VarChar(64)
+  metadata       Json?
+  ipAddress      String?        @db.VarChar(64)
+  userAgent      String?        @db.VarChar(512)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+
+  actor Account? @relation("AuditActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@index([actorAccountId])
+}

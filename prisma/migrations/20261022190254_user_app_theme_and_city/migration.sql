@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "AppTheme" AS ENUM ('LAVENDER', 'OCEAN', 'FOREST', 'SUNSET', 'ROSE');
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "appTheme" "AppTheme" NOT NULL DEFAULT 'LAVENDER',
+ADD COLUMN     "city" VARCHAR(100) NOT NULL DEFAULT '';

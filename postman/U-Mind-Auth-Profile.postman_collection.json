@@ -1,0 +1,152 @@
+{
+  "info": {
+    "name": "U Mind Auth & Profile",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "deviceId", "value": "550e8400-e29b-41d4-a716-446655440001" },
+    { "key": "recoveryKey", "value": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Platform", "value": "ios" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recoveryKey\": \"{{recoveryKey}}\",\n  \"alias\": \"Neela\",\n  \"avatarId\": \"avatar-indigo\",\n  \"lifeStage\": \"STARTING_OUT\",\n  \"gender\": \"WOMAN\",\n  \"startingFeelings\": [\"STRESSED\"],\n  \"appTheme\": \"LAVENDER\",\n  \"city\": \"Delhi\",\n  \"saathiCheckIn\": \"MORNING\",\n  \"saathiLanguage\": \"HINGLISH\",\n  \"unwindHabits\": [\"BREATHING\", \"WALKING\"],\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Recover",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recoveryKey\": \"{{recoveryKey}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/recover"
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/refresh"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/logout"
+          }
+        },
+        {
+          "name": "Session",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/auth/session"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/profile"
+          }
+        },
+        {
+          "name": "Patch Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alias\": \"Sky\",\n  \"avatarId\": \"avatar-mint\"\n}"
+            },
+            "url": "{{baseUrl}}/profile"
+          }
+        },
+        {
+          "name": "Patch Preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lifeStage\": \"BUILDING\",\n  \"gender\": \"PREFER_NOT_TO_SAY\"\n}"
+            },
+            "url": "{{baseUrl}}/profile/preferences"
+          }
+        },
+        {
+          "name": "Patch Personalization",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appTheme\": \"OCEAN\",\n  \"city\": \"Mumbai\"\n}"
+            },
+            "url": "{{baseUrl}}/profile/personalization"
+          }
+        },
+        {
+          "name": "Put Onboarding",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startingFeelings\": [\"LOW\", \"LONELY\"]\n}"
+            },
+            "url": "{{baseUrl}}/profile/onboarding"
+          }
+        }
+      ]
+    }
+  ]
+}
