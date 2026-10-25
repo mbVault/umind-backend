@@ -1,10 +1,34 @@
 import { Router } from "express";
 import { authRouter } from "./auth";
 import { profileRouter } from "./profile";
+import { psychologistsRouter } from "./psychologists";
+import { bookingsRouter } from "./bookings";
+import { sessionsRouter } from "./sessions";
+import { complaintsRouter } from "./complaints";
+import { ordersRouter } from "./orders";
+import { subscriptionPlansRouter } from "./subscriptionPlans";
+import { subscriptionsRouter } from "./subscriptions";
+import { saathiRouter } from "./saathi";
+import { moodsRouter } from "./moods";
+import { diaryRouter } from "./diary";
+import { privacyRouter } from "./privacy";
+import { audioRouter } from "./audio";
 import { staffRouter } from "./staff";
 
 export const apiRouter = Router();
 
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/profile", profileRouter);
+apiRouter.use("/psychologists", psychologistsRouter);
+apiRouter.use("/subscription-plans", subscriptionPlansRouter);
+apiRouter.use("/subscriptions", subscriptionsRouter);
+apiRouter.use("/bookings", bookingsRouter);
+apiRouter.use("/sessions", sessionsRouter);
+apiRouter.use("/complaints", complaintsRouter);
+apiRouter.use("/orders", ordersRouter);
+apiRouter.use("/moods", moodsRouter);
+apiRouter.use("/diary", diaryRouter);
+apiRouter.use("/privacy", privacyRouter);
+apiRouter.use("/audio", audioRouter);
+apiRouter.use("/saathi", saathiRouter);
 apiRouter.use("/v1/staff", staffRouter);

@@ -85,8 +85,23 @@ model User {
   updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
   deletedAt           DateTime?         @db.Timestamptz(6)
 
+  shareDiaryWithSaathi     Boolean   @default(false)
+  shareDiaryConsentVersion Int?
+  shareDiaryConsentAt      DateTime? @db.Timestamptz(6)
+  diaryKdfSalt             Bytes?
+  diaryKeyVersion          Int       @default(1)
+
   deviceRegistrations UserDevice[]
   sessions            AuthSession[]
+  psychologistBookings PsychologistBooking[]
+  subscriptions       Subscription[]
+  orders              Order[]
+  attendanceEvents    AttendanceEvent[]
+  sessionComplaints   SessionComplaint[]
+  recordingConsents   SessionRecordingConsent[]
+  saathiConversations SaathiConversation[]
+  userMoods           UserMood[]
+  diaryEntries        DiaryEntry[]
 }
 
 model Device {
@@ -175,6 +190,21 @@ enum PsychologistOnboardingStep {
   BACKGROUND_CHECK
   HOURS
   COMPLETE
+}
+
+/// Hours screen: LIVE psychs toggle Online/Away for client bookability.
+enum PsychologistPresence {
+  ONLINE
+  AWAY
+}
+
+/// After-session risk; URGENT must escalate to safety ops + Tele-MANAS (API layer).
+enum SessionRiskLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 enum SpecialisationCode {
@@ -279,6 +309,7 @@ model Account {
   auditLogs               AdminAuditLog[]               @relation("AuditActor")
   membershipRolesAssigned AdminMembershipRole[]         @relation("MembershipRoleAssigner")
   membershipsInvited      AdminMembership[]             @relation("MembershipInviter")
+  complaintsReviewed      SessionComplaint[]
 
   @@index([status])
 }
@@ -316,6 +347,17 @@ model PsychologistProfile {
   publishedAt            DateTime?                     @db.Timestamptz(6)
   suspendedAt            DateTime?                     @db.Timestamptz(6)
   suspensionReason       String?                       @db.VarChar(500)
+  /// Today/Hours: Online = eligible for new bookings (with other bookable gates).
+  presence               PsychologistPresence          @default(ONLINE)
+  /// Hours: hard stop on new client bookings when false (existing confirmed stay).
+  acceptingNewClients    Boolean                       @default(true)
+  /// Hours: null = no daily cap; enforced at booking time against confirmed sessions that day.
+  maxSessionsPerDay      Int?
+  /// Hours: modes this psych offers; booking.communicationMode must be ⊆ this set.
+  sessionModes           CommunicationMode[]           @default([])
+  /// Hours template: { "mon":[{"start":"09:00","end":"12:00"}], ... "sun":[...] }.
+  /// Concrete bookable rows still live in PsychologistAvailabilitySlot.
+  weeklyHours            Json?
   createdAt              DateTime                      @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime                      @updatedAt @db.Timestamptz(6)
 
@@ -324,10 +366,16 @@ model PsychologistProfile {
   languages       PsychologistLanguage[]
   documents       PsychologistDocument[]
   checks          PsychologistVerificationCheck[]
+  bookings        PsychologistBooking[]
+  availabilitySlots PsychologistAvailabilitySlot[]
+  attendanceEvents AttendanceEvent[]
+  recordingConsents SessionRecordingConsent[]
+  payouts         PsychologistPayout[]
 
   @@index([publicationStatus])
   @@index([accountStatus])
   @@index([applicationSubmittedAt])
+  @@index([publicationStatus, presence, acceptingNewClients])
 }
 
 model PsychologistSpecialisation {
@@ -495,4 +543,666 @@ model AdminAuditLog {
   @@index([action, createdAt])
   @@index([targetType, targetId])
   @@index([actorAccountId])
+}
+
+// ---------------------------------------------------------------------------
+// Booking, payments, subscriptions, sessions (client User + PsychologistProfile)
+// ---------------------------------------------------------------------------
+
+enum CommunicationMode {
+  CHAT
+  VOICE
+  VIDEO
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  NO_SHOW
+}
+
+enum CancelledByParty {
+  CUSTOMER
+  PSYCHOLOGIST
+  STAFF
+  SYSTEM
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  INTERRUPTED
+  CANCELLED
+  NO_SHOW
+  DISPUTED
+}
+
+enum ParticipantRole {
+  CUSTOMER
+  PSYCHOLOGIST
+}
+
+enum AttendanceEventType {
+  JOINED
+  LEFT
+  RECONNECTED
+  DISCONNECTED
+}
+
+enum RecordingStatus {
+  NOT_APPLICABLE
+  CONSENT_PENDING
+  CONSENTED
+  RECORDING
+  AVAILABLE
+  FAILED
+  DELETED
+}
+
+enum OrderPurpose {
+  PSYCHOLOGIST_BOOKING
+  SUBSCRIPTION
+}
+
+enum OrderStatus {
+  CREATED
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  AUTHORIZED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundReason {
+  CUSTOMER_CANCEL
+  CUSTOMER_LATE_CANCEL
+  PSYCHOLOGIST_CANCEL
+  PSYCHOLOGIST_NO_SHOW
+  COMPLAINT_FULL
+  COMPLAINT_PARTIAL
+  PAYMENT_AFTER_SLOT_RELEASED
+  ADMIN_ADJUSTMENT
+  OTHER
+}
+
+enum PaymentStatusChangeSource {
+  WEBHOOK
+  PROVIDER_API
+  RECONCILIATION
+  ADMIN
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum BillingMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum SubscriptionStatus {
+  PENDING
+  TRIALING
+  TRIAL_EXPIRED
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum PlanInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+enum ComplaintStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum ComplaintCategory {
+  SILENT_PSYCHOLOGIST
+  INAUDIBLE
+  UNRESPONSIVE
+  DISRUPTED
+  NOT_DELIVERED
+  OTHER
+}
+
+enum ComplaintDecision {
+  FULL_REFUND
+  PARTIAL_REFUND
+  NO_REFUND
+  FREE_RESCHEDULE
+}
+
+model PsychologistAvailabilitySlot {
+  id                    String              @id @default(uuid()) @db.Uuid
+  psychologistProfileId String              @db.Uuid
+  startsAt              DateTime            @db.Timestamptz(6)
+  endsAt                DateTime            @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+
+  psychologist PsychologistProfile @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([psychologistProfileId, startsAt])
+  @@index([psychologistProfileId, startsAt])
+}
+
+model PsychologistBooking {
+  id                       String            @id @default(uuid()) @db.Uuid
+  userId                   String            @db.Uuid
+  psychologistProfileId    String            @db.Uuid
+  scheduledStartAt         DateTime          @db.Timestamptz(6)
+  scheduledEndAt           DateTime          @db.Timestamptz(6)
+  durationMinutes          Int               @default(40)
+  communicationMode        CommunicationMode
+  status                   BookingStatus     @default(PENDING_PAYMENT)
+  reservationExpiresAt     DateTime?         @db.Timestamptz(6)
+  cancelledAt              DateTime?         @db.Timestamptz(6)
+  cancelledByParty         CancelledByParty?
+  cancellationReason       String?           @db.VarChar(1000)
+  policyVersion            String            @db.VarChar(32)
+  policySnapshot           Json?
+  rescheduledFromBookingId String?           @db.Uuid
+  customerRescheduleCount  Int               @default(0)
+  isFreeProviderReschedule Boolean           @default(false)
+  problemSnapshot          Json?
+  /// Client booking privacy: opt-in Saathi summary for psych brief (never full chat/diary).
+  shareSaathiSummary       Boolean           @default(false)
+  /// Client booking privacy: opt-in recent mood history for psych brief.
+  shareMoodHistory         Boolean           @default(false)
+  createdAt                DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(6)
+
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  psychologist      PsychologistProfile   @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+  rescheduledFrom   PsychologistBooking?  @relation("BookingReschedule", fields: [rescheduledFromBookingId], references: [id], onDelete: Restrict)
+  rescheduledTo     PsychologistBooking[] @relation("BookingReschedule")
+  complaintReplacement SessionComplaint?  @relation("ComplaintReplacementBooking")
+  orders            Order[]
+  session           PsychologistSession?
+
+  @@index([userId, status])
+  @@index([psychologistProfileId, scheduledStartAt])
+  @@index([status, reservationExpiresAt])
+  @@index([rescheduledFromBookingId])
+}
+
+model PsychologistSession {
+  id                   String          @id @default(uuid()) @db.Uuid
+  bookingId            String          @unique @db.Uuid
+  status               SessionStatus   @default(SCHEDULED)
+  actualStartedAt      DateTime?       @db.Timestamptz(6)
+  actualEndedAt        DateTime?       @db.Timestamptz(6)
+  attendanceVerified   Boolean         @default(false)
+  attendanceVerifiedAt DateTime?       @db.Timestamptz(6)
+  attendanceSummary    Json?
+  recordingStatus      RecordingStatus @default(NOT_APPLICABLE)
+  recordingObjectKey   String?         @db.VarChar(512)
+  recordingStartedAt   DateTime?       @db.Timestamptz(6)
+  recordingEndedAt     DateTime?       @db.Timestamptz(6)
+  /// Live screen: psych-only private notes (never shown to client).
+  privateNotes         String?         @db.Text
+  privateNoteTags      String[]        @default([])
+  /// After-session outcome; null until psych submits aftercare.
+  riskLevel            SessionRiskLevel?
+  /// AudioTrack.id values recommended to the client (UUID strings).
+  recommendedAudioIds  String[]        @default([])
+  followUpRecommended  Boolean         @default(false)
+  followUpNote         String?         @db.VarChar(1000)
+  /// Short note visible to the client after the session.
+  clientFacingNote     String?         @db.VarChar(2000)
+  aftercareSubmittedAt DateTime?       @db.Timestamptz(6)
+  createdAt            DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime        @updatedAt @db.Timestamptz(6)
+
+  booking           PsychologistBooking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  attendanceEvents  AttendanceEvent[]
+  recordingConsents SessionRecordingConsent[]
+  complaints        SessionComplaint[]
+  payout            PsychologistPayout?
+
+  @@index([status])
+  @@index([riskLevel])
+}
+
+model SessionRecordingConsent {
+  id                    String          @id @default(uuid()) @db.Uuid
+  sessionId             String          @db.Uuid
+  participantRole       ParticipantRole
+  userId                String?         @db.Uuid
+  psychologistProfileId String?         @db.Uuid
+  consentedAt           DateTime        @db.Timestamptz(6)
+  revokedAt             DateTime?       @db.Timestamptz(6)
+
+  session      PsychologistSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  user         User?               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  psychologist PsychologistProfile? @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, participantRole])
+  @@index([sessionId])
+}
+
+model AttendanceEvent {
+  id                    String              @id @default(uuid()) @db.Uuid
+  sessionId             String              @db.Uuid
+  participantRole       ParticipantRole
+  userId                String?             @db.Uuid
+  psychologistProfileId String?             @db.Uuid
+  eventType             AttendanceEventType
+  occurredAt            DateTime            @db.Timestamptz(6)
+  metadata              Json?
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+
+  session      PsychologistSession  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  user         User?                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  psychologist PsychologistProfile? @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, occurredAt])
+  @@index([sessionId, participantRole, occurredAt])
+}
+
+model SubscriptionPlan {
+  id              String       @id @default(uuid()) @db.Uuid
+  code            String       @unique @db.VarChar(32)
+  name            String       @db.VarChar(80)
+  priceMinorUnits Int
+  currency        String       @db.Char(3)
+  interval        PlanInterval
+  durationDays    Int
+  isActive        Boolean      @default(true)
+  razorpayPlanId  String?      @db.VarChar(64)
+  stripePriceId   String?      @db.VarChar(64)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Uuid
+  userId                 String             @db.Uuid
+  planId                 String             @db.Uuid
+  billingMode            BillingMode
+  status                 SubscriptionStatus @default(PENDING)
+  provider               PaymentProvider
+  providerSubscriptionId String?            @db.VarChar(128)
+  trialStartsAt          DateTime?          @db.Timestamptz(6)
+  trialEndsAt            DateTime?          @db.Timestamptz(6)
+  currentPeriodStart     DateTime?          @db.Timestamptz(6)
+  currentPeriodEnd       DateTime?          @db.Timestamptz(6)
+  cancelledAt            DateTime?          @db.Timestamptz(6)
+  cancelAtPeriodEnd      Boolean            @default(false)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  orders Order[]
+
+  @@index([userId, status])
+}
+
+model Order {
+  id               String          @id @default(uuid()) @db.Uuid
+  userId           String          @db.Uuid
+  purpose          OrderPurpose
+  bookingId        String?         @db.Uuid
+  subscriptionId   String?         @db.Uuid
+  amountMinorUnits Int
+  currency         String          @db.Char(3)
+  provider         PaymentProvider
+  providerOrderId  String?         @db.VarChar(128)
+  status           OrderStatus     @default(CREATED)
+  idempotencyKey   String?         @unique @db.VarChar(64)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(6)
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  booking      PsychologistBooking?  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  subscription Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  payments     Payment[]
+
+  @@index([userId, status])
+  @@index([bookingId])
+  @@index([subscriptionId])
+}
+
+model Payment {
+  id                String          @id @default(uuid()) @db.Uuid
+  orderId           String          @db.Uuid
+  provider          PaymentProvider
+  providerPaymentId String?         @db.VarChar(128)
+  amountMinorUnits  Int
+  currency          String          @db.Char(3)
+  status            PaymentStatus   @default(PENDING)
+  providerStatus    String?         @db.VarChar(64)
+  paidAt            DateTime?       @db.Timestamptz(6)
+  failedAt          DateTime?       @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+
+  order         Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds       PaymentRefund[]
+  statusHistory PaymentStatusHistory[]
+  payouts       PsychologistPayout[]
+
+  @@index([orderId, status])
+}
+
+model PaymentRefund {
+  id               String         @id @default(uuid()) @db.Uuid
+  paymentId        String         @db.Uuid
+  provider         PaymentProvider
+  amountMinorUnits Int
+  currency         String         @db.Char(3)
+  reason           RefundReason
+  reasonDetail     String?        @db.VarChar(1000)
+  providerRefundId String?        @db.VarChar(128)
+  status           RefundStatus   @default(PENDING)
+  idempotencyKey   String?        @unique @db.VarChar(64)
+  initiatedAt      DateTime       @default(now()) @db.Timestamptz(6)
+  completedAt      DateTime?      @db.Timestamptz(6)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(6)
+
+  payment   Payment           @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  complaint SessionComplaint?
+
+  @@index([paymentId, status])
+}
+
+model PaymentStatusHistory {
+  id              String                    @id @default(uuid()) @db.Uuid
+  paymentId       String                    @db.Uuid
+  oldStatus       PaymentStatus?
+  newStatus       PaymentStatus
+  source          PaymentStatusChangeSource
+  providerEventId String?                   @db.VarChar(128)
+  metadata        Json?
+  changedAt       DateTime                  @default(now()) @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId, changedAt])
+}
+
+model PaymentWebhookEvent {
+  id               String                  @id @default(uuid()) @db.Uuid
+  provider         PaymentProvider
+  providerEventId  String                  @db.VarChar(128)
+  eventType        String                  @db.VarChar(128)
+  payload          Json
+  processingStatus WebhookProcessingStatus @default(RECEIVED)
+  receivedAt       DateTime                @default(now()) @db.Timestamptz(6)
+  processedAt      DateTime?               @db.Timestamptz(6)
+  lastError        String?                 @db.VarChar(2000)
+
+  @@unique([provider, providerEventId])
+  @@index([processingStatus, receivedAt])
+}
+
+model PsychologistPayout {
+  id                          String          @id @default(uuid()) @db.Uuid
+  sessionId                   String          @unique @db.Uuid
+  psychologistProfileId       String          @db.Uuid
+  paymentId                   String          @db.Uuid
+  grossAmountMinorUnits       Int
+  psychologistShareMinorUnits Int
+  platformShareMinorUnits     Int
+  splitVersion                String          @db.VarChar(32)
+  currency                    String          @db.Char(3)
+  provider                    PaymentProvider
+  providerTransferId          String?         @db.VarChar(128)
+  status                      PayoutStatus    @default(PENDING)
+  initiatedAt                 DateTime?       @db.Timestamptz(6)
+  paidAt                      DateTime?       @db.Timestamptz(6)
+  lastError                   String?         @db.VarChar(2000)
+  createdAt                   DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime        @updatedAt @db.Timestamptz(6)
+
+  session      PsychologistSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  psychologist PsychologistProfile @relation(fields: [psychologistProfileId], references: [id], onDelete: Restrict)
+  payment      Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([psychologistProfileId, status])
+}
+
+model SessionComplaint {
+  id                     String            @id @default(uuid()) @db.Uuid
+  sessionId              String            @db.Uuid
+  userId                 String            @db.Uuid
+  category               ComplaintCategory
+  description            String            @db.Text
+  status                 ComplaintStatus   @default(OPEN)
+  reviewerAccountId      String?           @db.Uuid
+  decision               ComplaintDecision?
+  decisionRationale      String?           @db.Text
+  paymentRefundId        String?           @unique @db.Uuid
+  replacementBookingId   String?           @unique @db.Uuid
+  createdAt              DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime          @updatedAt @db.Timestamptz(6)
+  resolvedAt             DateTime?         @db.Timestamptz(6)
+
+  session            PsychologistSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reviewer           Account?            @relation(fields: [reviewerAccountId], references: [id], onDelete: SetNull)
+  paymentRefund      PaymentRefund?      @relation(fields: [paymentRefundId], references: [id], onDelete: SetNull)
+  replacementBooking PsychologistBooking? @relation("ComplaintReplacementBooking", fields: [replacementBookingId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([status])
+  @@index([reviewerAccountId])
+}
+
+// --- Saathi AI companion (client JWT / User plane; not staff Account) ---
+
+enum SaathiMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum SaathiMessageStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model SaathiConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  title     String?  @db.VarChar(120)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages SaathiMessage[]
+  memory   SaathiMemory?
+
+  @@index([userId, updatedAt])
+}
+
+model SaathiMessage {
+  id             String              @id @default(uuid()) @db.Uuid
+  conversationId String              @db.Uuid
+  role           SaathiMessageRole
+  content        String              @db.Text
+  status         SaathiMessageStatus @default(COMPLETED)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+
+  conversation SaathiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model SaathiMemory {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @unique @db.Uuid
+  summary        String   @db.Text
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  conversation SaathiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// --- Phase 2: Mood (plaintext) + Diary (E2E ciphertext) + Audio catalogue ---
+
+model Mood {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String     @unique @db.VarChar(32)
+  userMoods UserMood[]
+}
+
+model UserMood {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  moodId    String   @db.Uuid
+  date      DateTime @db.Date
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  mood Mood @relation(fields: [moodId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, date])
+}
+
+model DiaryEntry {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  entryDate         DateTime @db.Date
+  ciphertext        Bytes
+  nonce             Bytes
+  encryptionVersion Int      @default(1)
+  schemaVersion     Int      @default(1)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, entryDate])
+}
+
+enum AudioLanguage {
+  HINDI
+  ENGLISH
+}
+
+enum AudioPublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/** Per-track unlock: FREE = any signed-in user; TRIAL = trial/active; SUBSCRIPTION = paid ACTIVE only. */
+enum AudioAccessTier {
+  FREE
+  TRIAL
+  SUBSCRIPTION
+}
+
+enum AudioCategory {
+  STRESS
+  ANXIETY
+  SLEEP
+  FOCUS
+  RELATIONSHIPS
+  BODY
+  HER_CYCLE
+}
+
+model AudioTrack {
+  id              String             @id @default(uuid()) @db.Uuid
+  title           String             @db.VarChar(160)
+  description     String?            @db.VarChar(1000)
+  category        AudioCategory
+  status          AudioPublishStatus @default(DRAFT)
+  accessTier      AudioAccessTier    @default(TRIAL)
+  durationSeconds Int?
+  createdAt       DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
+
+  versions         AudioVersion[]
+  feelingTags      AudioFeelingTag[]
+  lifeStageTargets AudioLifeStageTarget[]
+  genderTargets    AudioGenderTarget[]
+}
+
+model AudioVersion {
+  id              String        @id @default(uuid()) @db.Uuid
+  audioTrackId    String        @db.Uuid
+  language        AudioLanguage
+  r2ObjectKey     String        @db.VarChar(512)
+  mimeType        String        @db.VarChar(100)
+  durationSeconds Int?
+  byteSize        Int?
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+
+  track AudioTrack @relation(fields: [audioTrackId], references: [id], onDelete: Cascade)
+
+  @@unique([audioTrackId, language])
+}
+
+model AudioFeelingTag {
+  audioTrackId String          @db.Uuid
+  feeling      StartingFeeling
+  track        AudioTrack      @relation(fields: [audioTrackId], references: [id], onDelete: Cascade)
+
+  @@id([audioTrackId, feeling])
+}
+
+model AudioLifeStageTarget {
+  audioTrackId String    @db.Uuid
+  lifeStage    LifeStage
+  track        AudioTrack @relation(fields: [audioTrackId], references: [id], onDelete: Cascade)
+
+  @@id([audioTrackId, lifeStage])
+}
+
+model AudioGenderTarget {
+  audioTrackId String     @db.Uuid
+  gender       Gender
+  track        AudioTrack @relation(fields: [audioTrackId], references: [id], onDelete: Cascade)
+
+  @@id([audioTrackId, gender])
 }

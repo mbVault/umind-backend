@@ -1,10 +1,12 @@
-import express, { Application } from "express";
+import express, { Application, raw } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { middleware as stMiddleware, errorHandler as stErrorHandler } from "supertokens-node/framework/express";
 import { env } from "./config/env";
 import { getSuperTokensCorsHeaders, initSuperTokens, isSuperTokensConfigured } from "./config/supertokens";
 import { apiRouter } from "./routes";
+import { storageRouter } from "./routes/storage";
+import { webhooksRouter } from "./routes/webhooks";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFoundHandler } from "./middleware/notFoundHandler";
 
@@ -21,7 +23,12 @@ export const createApp = (): Application => {
       allowedHeaders: ["Content-Type", "Authorization", "X-Client-Platform", "X-Test-SuperTokens-User-Id", ...getSuperTokensCorsHeaders()],
     })
   );
-  app.use(express.json());
+  app.use("/api/webhooks", raw({ type: "application/json" }), webhooksRouter);
+
+  // Local signed object storage (PUT needs raw body; mount before json parser).
+  app.use("/api/storage", storageRouter);
+
+  app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 
   if (isSuperTokensConfigured()) {

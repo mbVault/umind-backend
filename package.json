@@ -13,6 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed:staff-rbac": "tsx prisma/seedStaffRbac.ts",
+    "prisma:seed:availability": "tsx prisma/seedAvailabilitySlots.ts",
+    "prisma:seed:local-catalogue": "tsx prisma/seedLocalDevCatalogue.ts",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit"
   },
@@ -23,6 +25,8 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
+    "razorpay": "^2.9.8",
+    "stripe": "^23.0.1",
     "supertokens-node": "^24.0.4",
     "uuid": "^14.0.3",
     "zod": "^3.24.2"

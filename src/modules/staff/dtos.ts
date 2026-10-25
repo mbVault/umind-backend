@@ -34,6 +34,11 @@ export const toPsychologistProfileDto = (profile: {
   publishedAt: Date | null;
   suspendedAt: Date | null;
   suspensionReason: string | null;
+  presence?: string;
+  acceptingNewClients?: boolean;
+  maxSessionsPerDay?: number | null;
+  sessionModes?: string[];
+  weeklyHours?: unknown;
   specialisations?: { code: string }[];
   languages?: { code: string }[];
   checks?: { id: string; type: string; status: string; reason: string | null; reviewedAt: Date | null }[];
@@ -59,6 +64,12 @@ export const toPsychologistProfileDto = (profile: {
   publishedAt: profile.publishedAt?.toISOString() ?? null,
   suspendedAt: profile.suspendedAt?.toISOString() ?? null,
   suspensionReason: profile.suspensionReason,
+  // Hours / Today (staff self + admin only — not on client public DTO)
+  presence: profile.presence ?? "ONLINE",
+  acceptingNewClients: profile.acceptingNewClients ?? true,
+  maxSessionsPerDay: profile.maxSessionsPerDay ?? null,
+  sessionModes: profile.sessionModes ?? [],
+  weeklyHours: profile.weeklyHours ?? null,
   specialisations: profile.specialisations?.map((s) => s.code) ?? [],
   languages: profile.languages?.map((l) => l.code) ?? [],
   checks:

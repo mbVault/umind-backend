@@ -6,6 +6,8 @@ build/
 
 # Environment variables
 .env
+.local-storage/
+rzp-test-key.csv
 .env.local
 .env.*.local
 !.env.example

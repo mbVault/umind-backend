@@ -133,7 +133,7 @@ describe("Staff auth foundation", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 503 for document upload when storage is not configured", async () => {
+  it("mints a signed document upload URL when local object storage is configured", async () => {
     await createStaffAccount({
       superTokensUserId: "st-psych-upload",
       roles: [StaffRole.PSYCHOLOGIST],
@@ -146,7 +146,9 @@ describe("Staff auth foundation", () => {
         contentType: "image/jpeg",
         byteSize: 1024,
       });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
+    expect(res.body.data.uploadUrl).toContain("/api/storage/objects");
+    expect(res.body.data.objectKey).toContain("psychologists/");
   });
 
   it("rejects publication unless all checks are verified", async () => {

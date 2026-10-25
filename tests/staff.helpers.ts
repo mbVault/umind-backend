@@ -8,6 +8,17 @@ import { prisma } from "../src/lib/prisma";
 import { ROLE_PERMISSION_MAP, ADMIN_PERMISSIONS, ADMIN_ROLE_NAMES } from "../src/modules/staff/permissions";
 
 export const resetStaffTables = async (): Promise<void> => {
+  await prisma.sessionComplaint.deleteMany();
+  await prisma.psychologistPayout.deleteMany();
+  await prisma.paymentStatusHistory.deleteMany();
+  await prisma.paymentRefund.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.order.deleteMany();
+  await prisma.sessionRecordingConsent.deleteMany();
+  await prisma.attendanceEvent.deleteMany();
+  await prisma.psychologistSession.deleteMany();
+  await prisma.psychologistBooking.deleteMany();
+  await prisma.psychologistAvailabilitySlot.deleteMany();
   await prisma.adminAuditLog.deleteMany();
   await prisma.adminInvitation.deleteMany();
   await prisma.adminMembershipRole.deleteMany();

@@ -32,6 +32,63 @@ export const profilePatchSchema = z.object({
   publicPhotoObjectKey: z.string().max(512).nullable().optional(),
 });
 
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
+
+const dayWindowsSchema = z
+  .array(
+    z
+      .object({ start: hhmm, end: hhmm })
+      .refine((w) => w.start < w.end, { message: "start must be before end" })
+  )
+  .max(12);
+
+export const weeklyHoursSchema = z
+  .object({
+    mon: dayWindowsSchema.default([]),
+    tue: dayWindowsSchema.default([]),
+    wed: dayWindowsSchema.default([]),
+    thu: dayWindowsSchema.default([]),
+    fri: dayWindowsSchema.default([]),
+    sat: dayWindowsSchema.default([]),
+    sun: dayWindowsSchema.default([]),
+  })
+  .strict();
+
+export const presencePatchSchema = z
+  .object({
+    presence: z.enum(["ONLINE", "AWAY"]),
+  })
+  .strict();
+
+export const hoursPatchSchema = z
+  .object({
+    presence: z.enum(["ONLINE", "AWAY"]).optional(),
+    acceptingNewClients: z.boolean().optional(),
+    maxSessionsPerDay: z.number().int().min(1).max(24).nullable().optional(),
+    sessionModes: z.array(z.enum(["CHAT", "VOICE", "VIDEO"])).min(1).max(3).optional(),
+    weeklyHours: weeklyHoursSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, { message: "At least one field required" });
+
+export const staffAvailabilityQuerySchema = z.object({
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+});
+
+export const staffAvailabilityPutSchema = z
+  .object({
+    replaceOpenSlots: z
+      .array(
+        z.object({
+          startsAt: z.coerce.date(),
+          endsAt: z.coerce.date(),
+        })
+      )
+      .max(500),
+  })
+  .strict();
+
 export const uploadUrlBodySchema = z.object({
   kind: z.enum([
     "ID_FRONT",
@@ -134,4 +191,55 @@ export const uuidParamSchema = z.object({
   documentId: z.string().uuid().optional(),
   checkId: z.string().uuid().optional(),
   membershipId: z.string().uuid().optional(),
+});
+
+export const dashboardQuerySchema = z.object({
+  date: z.coerce.date().optional(),
+});
+
+export const bookingsDateQuerySchema = z.object({
+  date: z.coerce.date(),
+});
+
+export const earningsMonthQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+});
+
+export const payoutsListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const sessionNotesBodySchema = z
+  .object({
+    privateNotes: z.string().max(20000).nullable().optional(),
+    privateNoteTags: z.array(z.string().min(1).max(40)).max(20).optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, { message: "At least one field required" });
+
+export const afterSessionBodySchema = z
+  .object({
+    riskLevel: z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "URGENT"]),
+    recommendedAudioIds: z.array(z.string().uuid()).max(10).optional(),
+    followUpRecommended: z.boolean().optional(),
+    followUpNote: z.string().max(1000).nullable().optional(),
+    clientFacingNote: z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+
+export const bookingIdParamSchema = z.object({
+  bookingId: z.string().uuid(),
+});
+
+export const sessionIdParamSchema = z.object({
+  sessionId: z.string().uuid(),
+});
+
+export const clientRefParamSchema = z.object({
+  clientRef: z.string().min(8).max(64),
+});
+
+export const payoutIdParamSchema = z.object({
+  payoutId: z.string().uuid(),
 });

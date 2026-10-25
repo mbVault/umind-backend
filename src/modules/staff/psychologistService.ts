@@ -1,9 +1,11 @@
 import {
+  CommunicationMode,
   DocumentStatus,
   Prisma,
   PsychologistAccountStatus,
   PsychologistDocumentKind,
   PsychologistOnboardingStep,
+  PsychologistPresence,
   PsychologistPublicationStatus,
   VerificationCheckStatus,
   VerificationCheckType,
@@ -326,9 +328,15 @@ export const isPsychologistBookable = (profile: {
   publicationStatus: PsychologistPublicationStatus;
   accountStatus: PsychologistAccountStatus;
   checks: { type: VerificationCheckType; status: VerificationCheckStatus }[];
+  presence?: PsychologistPresence;
+  acceptingNewClients?: boolean;
+  sessionModes?: CommunicationMode[];
 }): boolean => {
   if (profile.publicationStatus !== PsychologistPublicationStatus.LIVE) return false;
   if (profile.accountStatus !== PsychologistAccountStatus.ACTIVE) return false;
+  if (profile.presence !== undefined && profile.presence !== PsychologistPresence.ONLINE) return false;
+  if (profile.acceptingNewClients === false) return false;
+  if (profile.sessionModes !== undefined && profile.sessionModes.length === 0) return false;
   return REQUIRED_VERIFICATION_CHECKS.every((t) =>
     profile.checks.some((c) => c.type === t && c.status === VerificationCheckStatus.VERIFIED)
   );
@@ -355,6 +363,16 @@ export const publishPsychologist = async (psychologistId: string, actorAccountId
     data: {
       publicationStatus: PsychologistPublicationStatus.LIVE,
       publishedAt: new Date(),
+      // Avoid LIVE + empty modes (bookable gate would hide the psych from clients).
+      ...(profile.sessionModes.length === 0
+        ? {
+            sessionModes: [
+              CommunicationMode.CHAT,
+              CommunicationMode.VOICE,
+              CommunicationMode.VIDEO,
+            ],
+          }
+        : {}),
     },
     include: profileInclude,
   });
