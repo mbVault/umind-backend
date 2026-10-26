@@ -19,6 +19,11 @@ import {
 } from "../../modules/staff/documentService";
 import { toPsychologistProfileDto } from "../../modules/staff/dtos";
 import {
+  approvePsychologistByHr,
+  listHrPendingPsychologists,
+  rejectPsychologistByHr,
+} from "../../modules/staff/hrApprovalService";
+import {
   decideVerificationCheck,
   publishPsychologist,
   reactivatePsychologist,
@@ -27,6 +32,7 @@ import {
 } from "../../modules/staff/psychologistService";
 import {
   checkDecisionBodySchema,
+  hrRejectBodySchema,
   psychologistListQuerySchema,
   suspendBodySchema,
 } from "../../validators/staff";
@@ -79,6 +85,60 @@ adminPsychologistsRouter.get(
       total,
       items: rows.map(toPsychologistProfileDto),
     });
+  })
+);
+
+/** HR screening queue: submitted apps still PENDING_APPROVAL or REJECTED. */
+adminPsychologistsRouter.get(
+  "/hr-queue",
+  validateQuery(psychologistListQuerySchema),
+  asyncHandler(async (req, res) => {
+    const query = (
+      req as typeof req & { validatedQuery: { page: number; pageSize: number } }
+    ).validatedQuery;
+    const { total, items } = await listHrPendingPsychologists(query.page, query.pageSize);
+    sendSuccess(res, 200, {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      items: items.map((row) => ({
+        ...toPsychologistProfileDto(row),
+        email: row.account.email,
+      })),
+    });
+  })
+);
+
+adminPsychologistsRouter.post(
+  "/:psychologistId/hr-approve",
+  requireAdminPermission("psychologist.verify"),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    await approvePsychologistByHr({
+      psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
+      reviewerAccountId: account.id,
+    });
+    const profile = await prisma.psychologistProfile.findUnique({
+      where: { id: param(req.params.psychologistId, "psychologistId") },
+      include: { specialisations: true, languages: true, checks: true },
+    });
+    if (!profile) fail(404, "Psychologist not found");
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
+  })
+);
+
+adminPsychologistsRouter.post(
+  "/:psychologistId/hr-reject",
+  requireAdminPermission("psychologist.verify"),
+  validateBody(hrRejectBodySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const profile = await rejectPsychologistByHr({
+      psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
+      reviewerAccountId: account.id,
+      reason: (req.body as { reason: string }).reason,
+    });
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
   })
 );
 

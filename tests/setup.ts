@@ -13,7 +13,8 @@ process.env.OBJECT_STORAGE_DRIVER = process.env.OBJECT_STORAGE_DRIVER ?? "local"
 process.env.OBJECT_STORAGE_CONFIGURED = "true";
 process.env.LOCAL_STORAGE_ROOT = process.env.LOCAL_STORAGE_ROOT ?? "./.local-storage-test";
 process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-process.env.SUPERTOKENS_CONNECTION_URI = process.env.SUPERTOKENS_CONNECTION_URI ?? "";
+/** Never hit a live Core from unit/integration tests — use STAFF_AUTH_TEST_BYPASS. */
+process.env.SUPERTOKENS_CONNECTION_URI = "";
 
 /** Keep vitest deterministic — local .env must not enable live payment providers in tests. */
 process.env.RAZORPAY_KEY_ID = "";

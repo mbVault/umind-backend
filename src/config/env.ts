@@ -25,6 +25,17 @@ const envSchema = z.object({
   SUPERTOKENS_API_BASE_PATH: z.string().default("/api/v1/staff/auth"),
   SUPERTOKENS_WEBSITE_BASE_PATH: z.string().default("/auth"),
 
+  /** Staff ThirdParty (Google). Both required to enable Google on staff login. */
+  STAFF_GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  STAFF_GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
+
+  /** Staff ThirdParty (Apple). All four required to enable Apple on staff login. */
+  STAFF_APPLE_CLIENT_ID: z.string().optional().default(""),
+  STAFF_APPLE_KEY_ID: z.string().optional().default(""),
+  STAFF_APPLE_TEAM_ID: z.string().optional().default(""),
+  /** PEM; use \n for newlines inside a single-line .env value. */
+  STAFF_APPLE_PRIVATE_KEY: z.string().optional().default(""),
+
   /** When true (test only), allow X-Test-SuperTokens-User-Id instead of a live ST session. */
   STAFF_AUTH_TEST_BYPASS: z
     .string()

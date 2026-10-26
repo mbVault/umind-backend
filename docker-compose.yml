@@ -1,0 +1,88 @@
+# Local SuperTokens Core for U Mind staff auth (psychologist / admin).
+#
+# Architecture (verified against this repo):
+# - App DB: Prisma DATABASE_URL → existing Postgres (e.g. umind_dev) — unchanged
+# - SuperTokens DB: separate database on the same Postgres server (umind_supertokens)
+# - Core: pinned official image on 127.0.0.1:3567
+# - Backend SDK: SUPERTOKENS_CONNECTION_URI=http://localhost:3567 (host process)
+#
+# This machine already has Postgres on :5432, so Compose does NOT start a second
+# Postgres server. It only runs Core + a one-shot DB bootstrap against the host.
+#
+# Setup:
+#   1. Copy .env.docker.example → .env.docker and fill values (gitignored).
+#   2. Align backend .env: SUPERTOKENS_CONNECTION_URI + SUPERTOKENS_API_KEY
+#      (API key must match API_KEYS / SUPERTOKENS_API_KEY in .env.docker).
+#   3. Docker Desktop running, then:
+#        docker compose --env-file .env.docker up -d
+#   4. curl http://127.0.0.1:3567/hello
+#
+# Image pin: must share a CDI version with installed supertokens-node.
+# node@24.0.4 supports CDI 5.4 only → Core must include 5.4 (11.0.0 maxes at 5.3).
+# Pin: registry.supertokens.io/supertokens/supertokens-postgresql:11.4.8
+
+name: umind-supertokens
+
+services:
+  # Core does not CREATE DATABASE — only tables inside an existing DB.
+  st-db-init:
+    image: postgres:16.6
+    restart: "no"
+    env_file:
+      - .env.docker
+    environment:
+      PGPASSWORD: ${SUPERTOKENS_POSTGRES_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+        : "$${SUPERTOKENS_POSTGRES_HOST:?SUPERTOKENS_POSTGRES_HOST is required}"
+        : "$${SUPERTOKENS_POSTGRES_PORT:?SUPERTOKENS_POSTGRES_PORT is required}"
+        : "$${SUPERTOKENS_POSTGRES_USER:?SUPERTOKENS_POSTGRES_USER is required}"
+        : "$${SUPERTOKENS_POSTGRES_DB:?SUPERTOKENS_POSTGRES_DB is required}"
+        : "$${SUPERTOKENS_POSTGRES_PASSWORD:?SUPERTOKENS_POSTGRES_PASSWORD is required}"
+        echo "Waiting for Postgres at $${SUPERTOKENS_POSTGRES_HOST}:$${SUPERTOKENS_POSTGRES_PORT}…"
+        until pg_isready -h "$${SUPERTOKENS_POSTGRES_HOST}" -p "$${SUPERTOKENS_POSTGRES_PORT}" -U "$${SUPERTOKENS_POSTGRES_USER}" >/dev/null 2>&1; do
+          sleep 1
+        done
+        EXISTS="$$(psql -h "$${SUPERTOKENS_POSTGRES_HOST}" -p "$${SUPERTOKENS_POSTGRES_PORT}" -U "$${SUPERTOKENS_POSTGRES_USER}" -d postgres -Atqc "SELECT 1 FROM pg_database WHERE datname='$${SUPERTOKENS_POSTGRES_DB}'")"
+        if [ "$${EXISTS}" = "1" ]; then
+          echo "Database $${SUPERTOKENS_POSTGRES_DB} already exists."
+        else
+          echo "Creating database $${SUPERTOKENS_POSTGRES_DB}…"
+          psql -h "$${SUPERTOKENS_POSTGRES_HOST}" -p "$${SUPERTOKENS_POSTGRES_PORT}" -U "$${SUPERTOKENS_POSTGRES_USER}" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$${SUPERTOKENS_POSTGRES_DB}\";"
+        fi
+
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:11.4.8
+    restart: unless-stopped
+    depends_on:
+      st-db-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env.docker
+    environment:
+      # Prefer discrete vars so passwords need not be URL-encoded in a URI.
+      POSTGRESQL_USER: ${SUPERTOKENS_POSTGRES_USER}
+      POSTGRESQL_PASSWORD: ${SUPERTOKENS_POSTGRES_PASSWORD}
+      POSTGRESQL_HOST: ${SUPERTOKENS_POSTGRES_HOST}
+      POSTGRESQL_PORT: ${SUPERTOKENS_POSTGRES_PORT}
+      POSTGRESQL_DATABASE_NAME: ${SUPERTOKENS_POSTGRES_DB}
+      API_KEYS: ${SUPERTOKENS_API_KEY}
+    ports:
+      - "127.0.0.1:3567:3567"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e \"GET /hello HTTP/1.1\\r\\nhost: 127.0.0.1:3567\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q Hello'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 25s

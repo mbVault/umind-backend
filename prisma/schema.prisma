@@ -192,6 +192,13 @@ enum PsychologistOnboardingStep {
   COMPLETE
 }
 
+/// HR screening only — set by admin approve/reject, not by the applicant.
+enum PsychologistHrApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
 /// Hours screen: LIVE psychs toggle Online/Away for client bookability.
 enum PsychologistPresence {
   ONLINE
@@ -342,6 +349,11 @@ model PsychologistProfile {
   aadhaarLast4           String?                       @db.Char(4)
   onboardingStep         PsychologistOnboardingStep    @default(APPLY)
   applicationSubmittedAt DateTime?                     @db.Timestamptz(6)
+  /// HR screening: only admin approve/reject changes this (default pending).
+  hrApprovalStatus       PsychologistHrApprovalStatus  @default(PENDING_APPROVAL)
+  hrReviewedAt           DateTime?                     @db.Timestamptz(6)
+  hrReviewedByAccountId  String?                       @db.Uuid
+  hrRejectionReason      String?                       @db.VarChar(500)
   publicationStatus      PsychologistPublicationStatus @default(NOT_SUBMITTED)
   accountStatus          PsychologistAccountStatus     @default(ACTIVE)
   publishedAt            DateTime?                     @db.Timestamptz(6)
@@ -375,6 +387,7 @@ model PsychologistProfile {
   @@index([publicationStatus])
   @@index([accountStatus])
   @@index([applicationSubmittedAt])
+  @@index([hrApprovalStatus, applicationSubmittedAt])
   @@index([publicationStatus, presence, acceptingNewClients])
 }
 

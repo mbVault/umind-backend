@@ -6,11 +6,13 @@ build/
 
 # Environment variables
 .env
+.env.docker
 .local-storage/
 rzp-test-key.csv
 .env.local
 .env.*.local
 !.env.example
+!.env.docker.example
 
 # Editor & OS files
 .vscode/*

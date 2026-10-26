@@ -15,6 +15,12 @@
     "prisma:seed:staff-rbac": "tsx prisma/seedStaffRbac.ts",
     "prisma:seed:availability": "tsx prisma/seedAvailabilitySlots.ts",
     "prisma:seed:local-catalogue": "tsx prisma/seedLocalDevCatalogue.ts",
+    "supertokens:env": "node scripts/bootstrap-supertokens-env.mjs",
+    "supertokens:up": "docker compose --env-file .env.docker up -d",
+    "supertokens:down": "docker compose --env-file .env.docker down",
+    "supertokens:logs": "docker compose --env-file .env.docker logs -f supertokens",
+    "psych:provision": "tsx scripts/provision-local-psychologist.ts",
+    "psych:provision:live": "tsx scripts/provision-local-psychologist.ts --live",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit"
   },

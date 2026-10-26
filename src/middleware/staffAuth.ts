@@ -19,6 +19,11 @@ export interface StaffAuthenticatedRequest extends Request {
   };
 }
 
+/** SuperTokens session only — no Prisma Account required (applicant / invite accept). */
+export interface SuperTokensIdentityRequest extends Request {
+  superTokensUserId: string;
+}
+
 const resolveSuperTokensUserId = async (req: Request, res: Response): Promise<string> => {
   if (env.NODE_ENV === "test" && env.STAFF_AUTH_TEST_BYPASS) {
     const testId = req.header("x-test-supertokens-user-id");
@@ -40,6 +45,24 @@ export const requireStaffAccount = async (req: Request, res: Response, next: Nex
     const superTokensUserId = await resolveSuperTokensUserId(req, res);
     const account = await loadStaffAccountBySuperTokensUserId(superTokensUserId);
     (req as StaffAuthenticatedRequest).staff = { superTokensUserId, account };
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Session cookie/header required; Prisma Account is optional.
+ * Used for psychologist Onboard me (apply-first) and similar pre-provision flows.
+ */
+export const requireSuperTokensIdentity = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const superTokensUserId = await resolveSuperTokensUserId(req, res);
+    (req as SuperTokensIdentityRequest).superTokensUserId = superTokensUserId;
     next();
   } catch (err) {
     next(err);

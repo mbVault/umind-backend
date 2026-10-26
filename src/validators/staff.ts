@@ -24,6 +24,12 @@ export const applicationBodySchema = z.object({
   aadhaarLast4: z.string().max(12).optional(),
 });
 
+export const hrRejectBodySchema = z
+  .object({
+    reason: z.string().min(3).max(500),
+  })
+  .strict();
+
 export const profilePatchSchema = z.object({
   visibilityMode: z.enum(["REAL_NAME_AND_PHOTO", "DISPLAY_NAME_AND_AVATAR"]).optional(),
   displayName: z.string().min(1).max(80).optional(),

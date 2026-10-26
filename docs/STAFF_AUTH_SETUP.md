@@ -10,9 +10,69 @@ Authentication alone does **not** grant staff access. A provisioned `Account` wi
 
 ## Prerequisites
 
-1. PostgreSQL for the U Mind app database.
-2. SuperTokens Core (PostgreSQL-backed Docker image recommended) on a private network with `API_KEYS` set.
-3. Prefer a **separate database or schema** for SuperTokens tables so Prisma migrations do not conflict.
+1. PostgreSQL for the U Mind app database (`DATABASE_URL` / Prisma).
+2. SuperTokens Core (PostgreSQL-backed Docker image) with `API_KEYS` set.
+3. A **separate PostgreSQL database** for SuperTokens (default local name: `umind_supertokens`). Do **not** point Core at `umind_dev`.
+
+## Local SuperTokens Core (Docker Compose)
+
+This repo ships `docker-compose.yml` for Core only. It reuses the existing host Postgres on `:5432` (verified open in local dev) and creates `umind_supertokens` before Core starts.
+
+Pinned image: `registry.supertokens.io/supertokens/supertokens-postgresql:11.4.8`  
+(Must overlap CDI with `supertokens-node` — e.g. node 24.0.4 needs CDI 5.4; Core 11.0.0 is too old.)  
+Core listens on `127.0.0.1:3567` (loopback only).
+
+```bash
+# 1) Derive .env.docker + SUPERTOKENS_* in .env from DATABASE_URL (secrets not printed)
+npm run supertokens:env
+
+# 2) Start Docker Desktop, then Core
+npm run supertokens:up
+
+# 3) Smoke-check
+curl http://127.0.0.1:3567/hello
+```
+
+Or manually: copy `.env.docker.example` → `.env.docker`, set Postgres credentials + API key, align backend `.env`, then `docker compose --env-file .env.docker up -d`.
+
+**Backend connection URI**
+
+| Where the Node API runs | `SUPERTOKENS_CONNECTION_URI` |
+| --- | --- |
+| On the host (`npm run dev`) | `http://localhost:3567` |
+| Inside the same Compose network as Core | `http://supertokens:3567` |
+
+`SUPERTOKENS_API_KEY` in `.env` must equal `SUPERTOKENS_API_KEY` / Core `API_KEYS` in `.env.docker`.
+
+Empty `SUPERTOKENS_CONNECTION_URI` → SDK skips init; staff sessions are rejected until Core is configured (`src/config/supertokens.ts`).
+
+## Staff auth recipes
+
+Configured in `src/config/supertokens.ts`:
+
+| Method | Recipe | Notes |
+| --- | --- | --- |
+| Email + password | EmailPassword | Public signup disabled |
+| Email OTP | Passwordless (`USER_INPUT_CODE`) | OTP logged to server console until SMTP is wired |
+| Phone OTP | Passwordless (`EMAIL_OR_PHONE`) | OTP logged until SMS provider is wired |
+| Google | ThirdParty | Requires `STAFF_GOOGLE_CLIENT_ID` + `STAFF_GOOGLE_CLIENT_SECRET` |
+| Apple | ThirdParty | Requires Apple client id, key id, team id, private key |
+
+`GET /api/v1/staff/auth/methods` returns which methods are enabled (no auth).
+
+Staff access still requires a provisioned Prisma `Account` + role after SuperTokens sign-in.
+
+## Psychologist product flow (mobile)
+
+**Apply-first on existing `PsychologistProfile`:**
+
+1. **Onboard me** — Google / Apple / OTP → SuperTokens session → `Account` **without** `PSYCHOLOGIST` role + `PsychologistProfile` (`hrApprovalStatus = PENDING_APPROVAL`).
+2. Fills Apply → Profile → Docs on the same Profile (draft APIs need Account only).
+3. **Submit for HR** → `POST /psychologist/me/application/submit-hr` (still `PENDING_APPROVAL`).
+4. HR queue → `GET /admin/psychologists/hr-queue`; **approve** / **reject** only change `hrApprovalStatus` (`APPROVED` | `REJECTED`). Approve also grants `PSYCHOLOGIST` role.
+5. **Sign in** — works only with `PSYCHOLOGIST` role (after HR approve). Same Google/Apple identity.
+
+`hrApprovalStatus` is HR-only. Publication/`LIVE` remains the client bookability gate after verification.
 
 ## Environment
 

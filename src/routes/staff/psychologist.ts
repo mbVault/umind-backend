@@ -50,6 +50,7 @@ import {
   putAfterSession,
   putSessionNotes,
 } from "../../modules/staff/psychologistSessionOpsService";
+import { submitForHrReview } from "../../modules/staff/hrApprovalService";
 import {
   getOrCreatePsychologistProfile,
   submitPsychologistApplication,
@@ -81,7 +82,8 @@ import {
 
 export const psychologistRouter = Router();
 
-psychologistRouter.use(requireStaffAccount, requireStaffRole(StaffRole.PSYCHOLOGIST));
+/** Account required. PSYCHOLOGIST role only for clinic ops (after HR approve). */
+psychologistRouter.use(requireStaffAccount);
 
 psychologistRouter.get(
   "/me",
@@ -112,9 +114,20 @@ psychologistRouter.patch(
   })
 );
 
+/** Submit for HR screening (pending_approval). No Sign-in role granted. */
+psychologistRouter.post(
+  "/me/application/submit-hr",
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const profile = await submitForHrReview(account.id);
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
+  })
+);
+
 /** Today screen: Online / Away toggle. Does not cancel existing client bookings. */
 psychologistRouter.patch(
   "/me/presence",
+  requireStaffRole(StaffRole.PSYCHOLOGIST),
   validateBody(presencePatchSchema),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
@@ -127,6 +140,7 @@ psychologistRouter.patch(
 /** Hours screen: accepting-new, max/day, modes, weekly template (+ optional presence). */
 psychologistRouter.patch(
   "/me/hours",
+  requireStaffRole(StaffRole.PSYCHOLOGIST),
   validateBody(hoursPatchSchema),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
@@ -142,6 +156,7 @@ psychologistRouter.patch(
  */
 psychologistRouter.get(
   "/me/availability",
+  requireStaffRole(StaffRole.PSYCHOLOGIST),
   validateQuery(staffAvailabilityQuerySchema),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
@@ -162,6 +177,7 @@ psychologistRouter.get(
  */
 psychologistRouter.put(
   "/me/availability",
+  requireStaffRole(StaffRole.PSYCHOLOGIST),
   validateBody(staffAvailabilityPutSchema),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
@@ -174,8 +190,10 @@ psychologistRouter.put(
   })
 );
 
+/** Post-HR: submit docs into verification checks (approved psychologists). */
 psychologistRouter.post(
   "/me/application/submit",
+  requireStaffRole(StaffRole.PSYCHOLOGIST),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
     const profile = await submitPsychologistApplication(account.id);
@@ -288,7 +306,9 @@ psychologistRouter.post(
   })
 );
 
-// --- Today / Brief / Live / After / Clients / Earnings ---
+// --- Today / Brief / Live / After / Clients / Earnings (HR-approved only) ---
+
+psychologistRouter.use(requireStaffRole(StaffRole.PSYCHOLOGIST));
 
 psychologistRouter.get(
   "/me/dashboard",

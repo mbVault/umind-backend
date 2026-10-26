@@ -29,6 +29,8 @@ export const toPsychologistProfileDto = (profile: {
   aadhaarLast4: string | null;
   onboardingStep: string;
   applicationSubmittedAt: Date | null;
+  hrApprovalStatus?: string;
+  hrRejectionReason?: string | null;
   publicationStatus: string;
   accountStatus: string;
   publishedAt: Date | null;
@@ -59,6 +61,8 @@ export const toPsychologistProfileDto = (profile: {
   aadhaarLast4: profile.aadhaarLast4,
   onboardingStep: profile.onboardingStep,
   applicationSubmittedAt: profile.applicationSubmittedAt?.toISOString() ?? null,
+  hrApprovalStatus: profile.hrApprovalStatus ?? "PENDING_APPROVAL",
+  hrRejectionReason: profile.hrRejectionReason ?? null,
   publicationStatus: profile.publicationStatus,
   accountStatus: profile.accountStatus,
   publishedAt: profile.publishedAt?.toISOString() ?? null,
