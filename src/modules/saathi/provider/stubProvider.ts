@@ -1,10 +1,25 @@
+import { buildFirstReplyEmpathyText } from "../firstReply";
 import type { LlmProvider } from "./types";
 
 /** Deterministic local provider for tests/dev when no external LLM is configured. */
 export const stubSaathiProvider: LlmProvider = {
   name: "stub",
-  async generateReply({ userMessage, context }) {
+  async generateReply({ userMessage, context, mode, primaryAudioTitle }) {
     const lang = context.profile.saathiLanguage;
+
+    if (mode === "first") {
+      return {
+        content: buildFirstReplyEmpathyText({
+          alias: context.profile.alias,
+          language: lang,
+          userMessage,
+          audioTitle: primaryAudioTitle ?? null,
+        }),
+        provider: "stub",
+        model: "stub-v1-first",
+      };
+    }
+
     const feelings = context.profile.startingFeelings.join(", ") || "whatever you're carrying";
     const moodBit = context.currentMood ? ` Mood today: ${context.currentMood}.` : "";
     const diaryBit = context.diaryContext

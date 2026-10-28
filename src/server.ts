@@ -1,14 +1,17 @@
+import { createServer } from "node:http";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
+import { attachChatSocket } from "./socket";
 
 const app = createApp();
+const server = createServer(app);
+attachChatSocket(server);
 
-const server = app.listen(env.PORT, () => {
+server.listen(env.PORT, () => {
   console.log(`🚀 U Mind Backend running on http://localhost:${env.PORT} [${env.NODE_ENV}]`);
 });
 
-// Graceful shutdown handling
 const handleShutdown = async (signal: string) => {
   console.log(`\nReceived ${signal}. Gracefully shutting down...`);
   server.close(async () => {

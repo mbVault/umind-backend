@@ -99,6 +99,7 @@ model User {
   attendanceEvents    AttendanceEvent[]
   sessionComplaints   SessionComplaint[]
   recordingConsents   SessionRecordingConsent[]
+  chatMessages        PsychologistChatMessage[]
   saathiConversations SaathiConversation[]
   userMoods           UserMood[]
   diaryEntries        DiaryEntry[]
@@ -382,6 +383,7 @@ model PsychologistProfile {
   availabilitySlots PsychologistAvailabilitySlot[]
   attendanceEvents AttendanceEvent[]
   recordingConsents SessionRecordingConsent[]
+  chatMessages    PsychologistChatMessage[]
   payouts         PsychologistPayout[]
 
   @@index([publicationStatus])
@@ -811,11 +813,35 @@ model PsychologistSession {
   booking           PsychologistBooking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   attendanceEvents  AttendanceEvent[]
   recordingConsents SessionRecordingConsent[]
+  chatMessages      PsychologistChatMessage[]
   complaints        SessionComplaint[]
   payout            PsychologistPayout?
 
   @@index([status])
   @@index([riskLevel])
+}
+
+/// Persistent psychologist–client text chat for one PsychologistSession (CHAT mode).
+/// Sender identity: exactly one of senderUserId / senderPsychologistProfileId (enforced in SQL CHECK).
+model PsychologistChatMessage {
+  id                           String          @id @default(uuid()) @db.Uuid
+  sessionId                    String          @db.Uuid
+  senderRole                   ParticipantRole
+  senderUserId                 String?         @db.Uuid
+  senderPsychologistProfileId  String?         @db.Uuid
+  content                      String          @db.Text
+  /// Client-generated idempotency key (UUID or opaque); max 64 chars enforced by column + app.
+  clientMessageId              String          @db.VarChar(64)
+  createdAt                    DateTime        @default(now()) @db.Timestamptz(6)
+  /// Recipient read timestamp; set once by recipient only (service layer).
+  readAt                       DateTime?       @db.Timestamptz(6)
+
+  session      PsychologistSession  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  senderUser   User?               @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  senderPsychologist PsychologistProfile? @relation(fields: [senderPsychologistProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, senderRole, clientMessageId])
+  @@index([sessionId, createdAt, id])
 }
 
 model SessionRecordingConsent {

@@ -14,6 +14,9 @@ import {
   unwindHabitSchema,
 } from "./common";
 
+/** Plan selected on Trial screen — starts a 7-day TRIALING subscription at register. */
+export const subscriptionPlanCodeSchema = z.enum(["YEARLY", "QUARTERLY", "MONTHLY"]);
+
 export const registerBodySchema = z.object({
   recoveryKey: recoveryKeySchema,
   alias: aliasSchema,
@@ -27,6 +30,8 @@ export const registerBodySchema = z.object({
   saathiLanguage: saathiLanguageSchema,
   unwindHabits: z.array(unwindHabitSchema).min(1, "At least one unwind habit is required"),
   deviceId: deviceIdSchema.optional(),
+  /** When set (Trial CTA), free trial begins in the same request as account creation. */
+  subscriptionPlanCode: subscriptionPlanCodeSchema.optional(),
 });
 
 export const recoverBodySchema = z.object({

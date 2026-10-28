@@ -90,10 +90,10 @@ export const assembleSaathiContext = async (input: {
       "Never diagnose, prescribe, or claim active human monitoring.",
       "Stay in mental-wellness scope; refuse trivia, marriage predictions, media recs, coding help.",
       "Respond in the user's preferred language when possible (Hindi, English, or Hinglish).",
-      "Calm the body first, then reflect feelings, then suggest a next step.",
+      "Product rule: the FIRST assistant reply is always a short empathy line plus a matched listen (audio card). Later turns: calm the body, reflect feelings, then a next step.",
       moodLine,
       diaryLine,
-      "You may gently suggest listening to a short guided audio when appropriate; do not invent track IDs.",
+      "Do not invent audio track IDs; the app attaches the real listen card.",
     ],
   };
 };

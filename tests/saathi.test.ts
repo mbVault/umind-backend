@@ -104,8 +104,10 @@ describe("Saathi API", () => {
     expect(sent.body.data.assistantMessage.role).toBe("ASSISTANT");
     expect(sent.body.data.assistantMessage.status).toBe("COMPLETED");
     expect(sent.body.data.assistantMessage.content.length).toBeGreaterThan(10);
-    expect(sent.body.data.audioRecommendations).toEqual([]);
+    expect(sent.body.data.isFirstAssistantReply).toBe(true);
     expect(sent.body.data.safetyLevel).toBe("NORMAL");
+    // First reply always tries a matched listen when catalogue has published tracks.
+    expect(Array.isArray(sent.body.data.audioRecommendations)).toBe(true);
 
     const detail = await request(app)
       .get(`/api/saathi/conversations/${conversationId}`)

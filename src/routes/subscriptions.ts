@@ -5,8 +5,12 @@ import { fail } from "../lib/errors";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 import { validateBody } from "../middleware/validate";
 import { getSubscriptionMeForUser } from "../modules/subscriptions/entitlementService";
+import { startFreeTrialForUser } from "../modules/subscriptions/startFreeTrialService";
 import { startSubscriptionCheckout } from "../modules/subscriptions/subscriptionCheckoutService";
-import { subscriptionCheckoutBodySchema } from "../validators/subscriptions";
+import {
+  startFreeTrialBodySchema,
+  subscriptionCheckoutBodySchema,
+} from "../validators/subscriptions";
 
 export const subscriptionsRouter = Router();
 
@@ -18,6 +22,19 @@ subscriptionsRouter.get(
     const { userId } = (req as AuthenticatedRequest).auth;
     const data = await getSubscriptionMeForUser(userId);
     sendSuccess(res, 200, data);
+  }),
+);
+
+/** Start / resume a 7-day free trial (also runs automatically on register when plan is sent). */
+subscriptionsRouter.post(
+  "/start-trial",
+  validateBody(startFreeTrialBodySchema),
+  asyncHandler(async (req, res) => {
+    const { userId } = (req as AuthenticatedRequest).auth;
+    const { planCode } = startFreeTrialBodySchema.parse(req.body);
+    const trial = await startFreeTrialForUser(userId, planCode);
+    const me = await getSubscriptionMeForUser(userId);
+    sendSuccess(res, 201, { trial, entitlements: me.entitlements, subscription: me.subscription });
   }),
 );
 

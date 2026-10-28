@@ -8,13 +8,27 @@ type OpenAiChatResponse = {
 
 export const openaiSaathiProvider: LlmProvider = {
   name: "openai",
-  async generateReply({ userMessage, context }) {
+  async generateReply({ userMessage, context, mode, primaryAudioTitle }) {
     if (!env.OPENAI_API_KEY) {
       fail(503, "LLM provider is not configured");
     }
 
+    const firstTurnRules =
+      mode === "first"
+        ? [
+            "THIS IS THE FIRST ASSISTANT REPLY IN THE CHAT.",
+            "Write ONLY 1–2 short sentences of empathy and care.",
+            "Do not give long advice, lists, exercises, or questions beyond a soft optional invite.",
+            primaryAudioTitle
+              ? `Name the listen once: “${primaryAudioTitle}” — the app also shows an audio card.`
+              : "Gently mention a short listen may help; the app shows the audio card.",
+            "Keep under ~60 words.",
+          ]
+        : [];
+
     const system = [
       ...context.safetyInstructions,
+      ...firstTurnRules,
       `User alias: ${context.profile.alias}`,
       `Life stage: ${context.profile.lifeStage}`,
       `Gender: ${context.profile.gender}`,
@@ -50,8 +64,8 @@ export const openaiSaathiProvider: LlmProvider = {
         signal: controller.signal,
         body: JSON.stringify({
           model: env.SAATHI_LLM_MODEL,
-          temperature: 0.6,
-          max_tokens: 500,
+          temperature: mode === "first" ? 0.5 : 0.6,
+          max_tokens: mode === "first" ? 120 : 500,
           messages: [{ role: "system", content: system }, ...history, { role: "user", content: userMessage }],
         }),
       });

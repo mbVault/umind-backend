@@ -1,10 +1,12 @@
 import { Router } from "express";
+import { z } from "zod";
 import { asyncHandler } from "../lib/asyncHandler";
 import { sendSuccess } from "../lib/apiResponse";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
-import { validateBody, validateParams } from "../middleware/validate";
+import { validateBody, validateParams, validateQuery } from "../middleware/validate";
 import { choosePsychologistFaultRemedy } from "../modules/bookings/psychologistFaultResolutionService";
 import { fileSessionComplaint } from "../modules/sessions/complaintService";
+import { listChatMessagesForCustomer } from "../modules/sessions/chatService";
 import { psychologistFaultRemedyBodySchema } from "../validators/psychologistFault";
 import {
   completeSessionForCustomer,
@@ -14,11 +16,26 @@ import {
   recordCustomerAttendance,
 } from "../modules/sessions/sessionService";
 import { fileComplaintBodySchema } from "../validators/complaints";
+import { chatMessagesQuerySchema } from "../validators/chat";
 import { attendanceBodySchema, sessionIdParamSchema } from "../validators/sessions";
 
 export const sessionsRouter = Router();
 
 sessionsRouter.use(authenticate);
+
+sessionsRouter.get(
+  "/:sessionId/messages",
+  validateParams(sessionIdParamSchema),
+  validateQuery(chatMessagesQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { sessionId } = sessionIdParamSchema.parse(req.params);
+    const { userId } = (req as AuthenticatedRequest).auth;
+    const query = (req as typeof req & { validatedQuery: z.infer<typeof chatMessagesQuerySchema> })
+      .validatedQuery;
+    const data = await listChatMessagesForCustomer(userId, sessionId, query);
+    sendSuccess(res, 200, data);
+  }),
+);
 
 sessionsRouter.get(
   "/:sessionId",

@@ -7,6 +7,7 @@ import { getMoodNameForDate } from "../mood/moodService";
 import { assembleSaathiContext, SaathiDiaryContext } from "./contextAssembly";
 import { getOwnedConversation } from "./conversationService";
 import { INDIA_CRISIS_RESOURCES } from "./crisisResources";
+import { buildFirstReplyEmpathyText, pickFirstReplyAudio } from "./firstReply";
 import { maybeUpsertConversationMemory } from "./memoryService";
 import { getSaathiLlmProvider } from "./provider";
 import { assertSaathiMessageRateLimit } from "./rateLimit";
@@ -79,11 +80,21 @@ export const sendSaathiMessage = async (input: {
           safetyLevel: "NORMAL" as const,
           crisisResources: [],
           audioRecommendations: [] as Awaited<ReturnType<typeof recommendAudioForUser>>,
+          isFirstAssistantReply: false,
           deduped: true as const,
         };
       }
     }
   }
+
+  const priorAssistantCount = await prisma.saathiMessage.count({
+    where: {
+      conversationId: conversation.id,
+      role: SaathiMessageRole.ASSISTANT,
+      status: SaathiMessageStatus.COMPLETED,
+    },
+  });
+  const isFirstAssistantReply = priorAssistantCount === 0;
 
   const recentUser = await prisma.saathiMessage.findMany({
     where: {
@@ -127,12 +138,43 @@ export const sendSaathiMessage = async (input: {
   try {
     let reply: string;
     let safetyLevel = safety.level;
+    let audioRecommendations: Awaited<ReturnType<typeof recommendAudioForUser>> = [];
 
-    if (safety.level === "IMMEDIATE" || safety.level === "OUT_OF_SCOPE" || safety.level === "ELEVATED") {
+    const crisisSafety =
+      safety.level === "IMMEDIATE" || safety.level === "OUT_OF_SCOPE" || safety.level === "ELEVATED";
+
+    if (crisisSafety) {
       reply = safety.suggestedReply ?? "I'm here with you.";
-      if (safety.level === "ELEVATED") {
-        reply = safety.suggestedReply!;
+      // Crisis / out-of-scope: no audio push on first or later turns.
+      audioRecommendations = [];
+    } else if (isFirstAssistantReply) {
+      // Product rule: first AI reply = matched listen + short empathy text.
+      audioRecommendations = await pickFirstReplyAudio(input.user, content);
+      const primaryTitle = audioRecommendations[0]?.title ?? null;
+      const context = await assembleSaathiContext({
+        user: input.user,
+        conversationId: conversation.id,
+        currentMood,
+        diaryContext: diaryContext ?? null,
+      });
+      try {
+        const llm = getSaathiLlmProvider();
+        const generated = await llm.generateReply({
+          userMessage: content,
+          context,
+          mode: "first",
+          primaryAudioTitle: primaryTitle,
+        });
+        reply = generated.content;
+      } catch {
+        reply = buildFirstReplyEmpathyText({
+          alias: input.user.alias,
+          language: input.user.saathiLanguage,
+          userMessage: content,
+          audioTitle: primaryTitle,
+        });
       }
+      safetyLevel = "NORMAL";
     } else {
       const context = await assembleSaathiContext({
         user: input.user,
@@ -141,9 +183,14 @@ export const sendSaathiMessage = async (input: {
         diaryContext: diaryContext ?? null,
       });
       const llm = getSaathiLlmProvider();
-      const generated = await llm.generateReply({ userMessage: content, context });
+      const generated = await llm.generateReply({
+        userMessage: content,
+        context,
+        mode: "continue",
+      });
       reply = generated.content;
       safetyLevel = "NORMAL";
+      audioRecommendations = await recommendAudioForUser(input.user, { limit: 3 });
     }
 
     const assistantMessage = await prisma.saathiMessage.update({
@@ -171,9 +218,6 @@ export const sendSaathiMessage = async (input: {
     });
 
     const crisis = safetyLevel === "IMMEDIATE" || safetyLevel === "ELEVATED";
-    const audioRecommendations = crisis
-      ? []
-      : await recommendAudioForUser(input.user, { limit: 3 });
 
     return {
       userMessage: messageDto(userMessage),
@@ -181,6 +225,7 @@ export const sendSaathiMessage = async (input: {
       safetyLevel,
       crisisResources: crisis ? INDIA_CRISIS_RESOURCES : [],
       audioRecommendations,
+      isFirstAssistantReply,
       deduped: false as const,
     };
   } catch (err) {

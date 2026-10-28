@@ -12,6 +12,7 @@ export const resetCommerceTables = async (): Promise<void> => {
   await prisma.order.deleteMany();
   await prisma.sessionRecordingConsent.deleteMany();
   await prisma.attendanceEvent.deleteMany();
+  await prisma.psychologistChatMessage.deleteMany();
   await prisma.psychologistSession.deleteMany();
   await prisma.psychologistBooking.deleteMany();
   await prisma.subscription.deleteMany();

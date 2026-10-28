@@ -50,6 +50,8 @@ import {
   putAfterSession,
   putSessionNotes,
 } from "../../modules/staff/psychologistSessionOpsService";
+import { listChatMessagesForPsychologist } from "../../modules/sessions/chatService";
+import { chatMessagesQuerySchema } from "../../validators/chat";
 import { submitForHrReview } from "../../modules/staff/hrApprovalService";
 import {
   getOrCreatePsychologistProfile,
@@ -354,6 +356,22 @@ psychologistRouter.get(
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
     sendSuccess(res, 200, await getPsychologistSession(account.id, param(req.params.sessionId, "sessionId")));
+  })
+);
+
+psychologistRouter.get(
+  "/me/sessions/:sessionId/messages",
+  validateParams(sessionIdParamSchema),
+  validateQuery(chatMessagesQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const query = (req as typeof req & { validatedQuery: z.infer<typeof chatMessagesQuerySchema> })
+      .validatedQuery;
+    sendSuccess(
+      res,
+      200,
+      await listChatMessagesForPsychologist(account.id, param(req.params.sessionId, "sessionId"), query),
+    );
   })
 );
 

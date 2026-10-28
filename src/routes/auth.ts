@@ -22,6 +22,7 @@ import {
 } from "../modules/auth/sessionService";
 import { verifyAccessToken } from "../modules/auth/tokens";
 import { assertValidAccessToken } from "../modules/auth/sessionService";
+import { startFreeTrialForUser } from "../modules/subscriptions/startFreeTrialService";
 import {
   registerBodySchema,
   recoverBodySchema,
@@ -86,6 +87,10 @@ authRouter.post(
     const userDeviceId = await resolveUserDeviceId(user.id, body.deviceId, req.header("x-client-platform"));
     const tokens = await createAuthSession(user.id, userDeviceId);
 
+    const trial = body.subscriptionPlanCode
+      ? await startFreeTrialForUser(user.id, body.subscriptionPlanCode)
+      : null;
+
     sendSuccess(res, 201, {
       user: {
         id: user.id,
@@ -105,6 +110,7 @@ authRouter.post(
         refreshTokenExpiresAt: tokens.refreshTokenExpiresAt.toISOString(),
       },
       onboardingComplete: isOnboardingComplete(user),
+      trial,
     });
   })
 );

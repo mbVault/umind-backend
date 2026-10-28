@@ -1,11 +1,8 @@
 import {
   AccountStatus,
-  BillingMode,
   CommunicationMode,
-  PaymentProvider,
   PsychologistPresence,
   StaffRole,
-  SubscriptionStatus,
   VerificationCheckStatus,
   VerificationCheckType,
 } from "@prisma/client";
@@ -144,29 +141,26 @@ describe("Chunk 3 Phase 1 — discovery & subscriptions", () => {
           alias: "TrialUser",
           deviceId: "550e8400-e29b-41d4-a716-446655440010",
           recoveryKey: "river mango lantern quiet cedar monsoon pebble tulsi harbour velvet sparrow dawn",
+          subscriptionPlanCode: "YEARLY",
         }),
       );
     expect(reg.status).toBe(201);
+    expect(reg.body.data.trial?.status).toBe("TRIALING");
+    expect(reg.body.data.trial?.planCode).toBe("YEARLY");
     const trialToken = reg.body.data.tokens.accessToken;
-    const plan = await prisma.subscriptionPlan.findFirst({ where: { code: "MONTHLY" } });
-    expect(plan).toBeTruthy();
-
-    await prisma.subscription.create({
-      data: {
-        userId: reg.body.data.user.id,
-        planId: plan!.id,
-        billingMode: BillingMode.AUTOMATIC,
-        status: SubscriptionStatus.TRIALING,
-        provider: PaymentProvider.RAZORPAY,
-        trialStartsAt: new Date(),
-        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
 
     const trial = await request(app).get("/api/subscriptions/me").set("Authorization", `Bearer ${trialToken}`);
     expect(trial.status).toBe(200);
     expect(trial.body.data.subscription.status).toBe("TRIALING");
     expect(trial.body.data.entitlements.canAccessSaathi).toBe(true);
     expect(trial.body.data.entitlements.canBookPsychologist).toBe(false);
+
+    const again = await request(app)
+      .post("/api/subscriptions/start-trial")
+      .set("Authorization", `Bearer ${trialToken}`)
+      .send({ planCode: "MONTHLY" });
+    expect(again.status).toBe(201);
+    expect(again.body.data.entitlements.canAccessSaathi).toBe(true);
+    expect(again.body.data.subscription.status).toBe("TRIALING");
   });
 });
