@@ -36,6 +36,9 @@ export const ensureApplicantAccount = async (input: {
   }
 
   const account = await loadStaffAccountBySuperTokensUserId(input.superTokensUserId);
-  await getOrCreatePsychologistProfile(account.id);
+  const profile = await getOrCreatePsychologistProfile(account.id);
+  if (profile.identityOnboardingBlocked) {
+    fail(403, "This identity cannot start a new application. Contact support if you need help.");
+  }
   return loadStaffAccountBySuperTokensUserId(input.superTokensUserId);
 };

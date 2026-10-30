@@ -1,4 +1,6 @@
 import {
+  PsychologistAccountStatus,
+  PsychologistApplicantNextAction,
   PsychologistHrApprovalStatus,
   PsychologistOnboardingStep,
   PsychologistPublicationStatus,
@@ -15,13 +17,24 @@ import { getOrCreatePsychologistProfile } from "./psychologistService";
 
 /**
  * Applicant submits for HR queue. Does not grant Sign-in.
- * hrApprovalStatus stays PENDING_APPROVAL (or returns there after REJECTED).
+ * hrApprovalStatus stays PENDING_APPROVAL (or returns there after correctable REJECTED).
  */
 export const submitForHrReview = async (accountId: string) => {
   const profile = await getOrCreatePsychologistProfile(accountId);
 
+  if (profile.identityOnboardingBlocked || profile.applicantNextAction === PsychologistApplicantNextAction.NONE) {
+    fail(403, "This application was finally rejected and cannot be resubmitted");
+  }
+
   if (profile.hrApprovalStatus === PsychologistHrApprovalStatus.APPROVED) {
     fail(409, "Already approved by HR");
+  }
+
+  if (
+    profile.hrApprovalStatus === PsychologistHrApprovalStatus.REJECTED &&
+    profile.applicantNextAction !== PsychologistApplicantNextAction.RESUBMIT
+  ) {
+    fail(403, "Resubmission is not permitted for this application");
   }
 
   const errors: Record<string, string[]> = {};
@@ -41,6 +54,8 @@ export const submitForHrReview = async (accountId: string) => {
       applicationSubmittedAt: new Date(),
       hrApprovalStatus: PsychologistHrApprovalStatus.PENDING_APPROVAL,
       hrRejectionReason: null,
+      applicantNextAction: PsychologistApplicantNextAction.WAIT,
+      applicantMessage: null,
       onboardingStep: PsychologistOnboardingStep.BACKGROUND_CHECK,
     },
     include: {
@@ -62,6 +77,9 @@ export const approvePsychologistByHr = async (input: {
     include: { account: { include: { roles: true } } },
   });
   if (!profile) fail(404, "Psychologist not found");
+  if (profile.identityOnboardingBlocked) {
+    fail(409, "Identity is blocked; cannot approve");
+  }
   if (profile.hrApprovalStatus === PsychologistHrApprovalStatus.APPROVED) {
     fail(409, "Already approved");
   }
@@ -77,7 +95,10 @@ export const approvePsychologistByHr = async (input: {
         hrReviewedAt: new Date(),
         hrReviewedByAccountId: input.reviewerAccountId,
         hrRejectionReason: null,
+        applicantNextAction: PsychologistApplicantNextAction.WAIT,
+        applicantMessage: null,
         publicationStatus: PsychologistPublicationStatus.PENDING_VERIFICATION,
+        onboardingStep: PsychologistOnboardingStep.DOCUMENTS,
       },
     });
 
@@ -116,11 +137,16 @@ export const approvePsychologistByHr = async (input: {
   return loadStaffAccountBySuperTokensUserId(profile.account.superTokensUserId);
 };
 
-/** HR reject → REJECTED, no Sign-in role. */
+/**
+ * HR reject.
+ * allowResubmission=true → State 5 / 8A (RESUBMIT).
+ * allowResubmission=false → non-resubmittable at HR stage (NONE + identity block).
+ */
 export const rejectPsychologistByHr = async (input: {
   psychologistProfileId: string;
   reviewerAccountId: string;
   reason: string;
+  allowResubmission: boolean;
 }) => {
   const profile = await prisma.psychologistProfile.findUnique({
     where: { id: input.psychologistProfileId },
@@ -128,17 +154,26 @@ export const rejectPsychologistByHr = async (input: {
   });
   if (!profile) fail(404, "Psychologist not found");
   if (profile.hrApprovalStatus === PsychologistHrApprovalStatus.APPROVED) {
-    fail(409, "Cannot reject an already approved psychologist here; use suspend instead");
+    fail(409, "Cannot reject an already approved psychologist here; use final-bgv-reject or suspend");
   }
 
+  const applicantSafe = input.reason.slice(0, 500);
   const updated = await prisma.psychologistProfile.update({
     where: { id: profile.id },
     data: {
       hrApprovalStatus: PsychologistHrApprovalStatus.REJECTED,
       hrReviewedAt: new Date(),
       hrReviewedByAccountId: input.reviewerAccountId,
-      hrRejectionReason: input.reason.slice(0, 500),
-      onboardingStep: PsychologistOnboardingStep.APPLY,
+      hrRejectionReason: applicantSafe,
+      applicantMessage: applicantSafe,
+      applicantNextAction: input.allowResubmission
+        ? PsychologistApplicantNextAction.RESUBMIT
+        : PsychologistApplicantNextAction.NONE,
+      identityOnboardingBlocked: !input.allowResubmission,
+      finalRejectionAt: input.allowResubmission ? null : new Date(),
+      onboardingStep: input.allowResubmission
+        ? PsychologistOnboardingStep.APPLY
+        : PsychologistOnboardingStep.APPLY,
     },
     include: {
       specialisations: true,
@@ -153,7 +188,57 @@ export const rejectPsychologistByHr = async (input: {
     action: "PSYCHOLOGIST_HR_REJECTED",
     targetType: "PsychologistProfile",
     targetId: profile.id,
-    metadata: { reason: input.reason.slice(0, 200) },
+    metadata: {
+      reason: input.reason.slice(0, 200),
+      allowResubmission: input.allowResubmission,
+    },
+  });
+
+  return updated;
+};
+
+/**
+ * Final BGV failure (8B) — after HR approval / during verification.
+ * Permanently blocks resubmit and re-onboarding for this identity.
+ */
+export const rejectPsychologistFinalBgv = async (input: {
+  psychologistProfileId: string;
+  reviewerAccountId: string;
+  applicantSafeReason: string;
+}) => {
+  const profile = await prisma.psychologistProfile.findUnique({
+    where: { id: input.psychologistProfileId },
+  });
+  if (!profile) fail(404, "Psychologist not found");
+  if (profile.identityOnboardingBlocked && profile.applicantNextAction === PsychologistApplicantNextAction.NONE) {
+    fail(409, "Already finally rejected");
+  }
+
+  const applicantSafe = input.applicantSafeReason.slice(0, 500);
+  const updated = await prisma.psychologistProfile.update({
+    where: { id: profile.id },
+    data: {
+      applicantNextAction: PsychologistApplicantNextAction.NONE,
+      applicantMessage: applicantSafe,
+      identityOnboardingBlocked: true,
+      finalRejectionAt: new Date(),
+      publicationStatus: PsychologistPublicationStatus.NEEDS_ATTENTION,
+      accountStatus: PsychologistAccountStatus.DEACTIVATED,
+    },
+    include: {
+      specialisations: true,
+      languages: true,
+      documents: { orderBy: { createdAt: "desc" } },
+      checks: true,
+    },
+  });
+
+  await writeAuditLog({
+    actorAccountId: input.reviewerAccountId,
+    action: "PSYCHOLOGIST_FINAL_BGV_REJECTED",
+    targetType: "PsychologistProfile",
+    targetId: profile.id,
+    metadata: { reason: input.applicantSafeReason.slice(0, 200) },
   });
 
   return updated;
@@ -168,6 +253,7 @@ export const listHrPendingPsychologists = async (page: number, pageSize: number)
       ],
     },
     applicationSubmittedAt: { not: null },
+    identityOnboardingBlocked: false,
   };
   const [total, items] = await Promise.all([
     prisma.psychologistProfile.count({ where }),

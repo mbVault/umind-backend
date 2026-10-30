@@ -200,6 +200,16 @@ enum PsychologistHrApprovalStatus {
   REJECTED
 }
 
+/// Explicit applicant CTA driver — never infer from free-text rejection reasons.
+enum PsychologistApplicantNextAction {
+  WAIT
+  RESUBMIT
+  UPLOAD_DOC
+  CLARIFY
+  CONTACT_SUPPORT
+  NONE
+}
+
 /// Hours screen: LIVE psychs toggle Online/Away for client bookability.
 enum PsychologistPresence {
   ONLINE
@@ -355,6 +365,13 @@ model PsychologistProfile {
   hrReviewedAt           DateTime?                     @db.Timestamptz(6)
   hrReviewedByAccountId  String?                       @db.Uuid
   hrRejectionReason      String?                       @db.VarChar(500)
+  /// Drives Status Hub CTAs (RESUBMIT = 8A/State5; NONE = 8B final).
+  applicantNextAction    PsychologistApplicantNextAction @default(WAIT)
+  /// Applicant-safe message for hub (separate from internal admin notes).
+  applicantMessage       String?                       @db.VarChar(500)
+  /// When true: block Onboard me / submit-hr / Apply edit (final BGV failure).
+  identityOnboardingBlocked Boolean                    @default(false)
+  finalRejectionAt       DateTime?                     @db.Timestamptz(6)
   publicationStatus      PsychologistPublicationStatus @default(NOT_SUBMITTED)
   accountStatus          PsychologistAccountStatus     @default(ACTIVE)
   publishedAt            DateTime?                     @db.Timestamptz(6)

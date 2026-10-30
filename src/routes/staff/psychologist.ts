@@ -52,6 +52,7 @@ import {
 } from "../../modules/staff/psychologistSessionOpsService";
 import { listChatMessagesForPsychologist } from "../../modules/sessions/chatService";
 import { chatMessagesQuerySchema } from "../../validators/chat";
+import { submitClarificationResponse } from "../../modules/staff/applicantActionService";
 import { submitForHrReview } from "../../modules/staff/hrApprovalService";
 import {
   getOrCreatePsychologistProfile,
@@ -64,6 +65,7 @@ import {
   applicationBodySchema,
   bookingIdParamSchema,
   bookingsDateQuerySchema,
+  clarificationResponseBodySchema,
   clientRefParamSchema,
   confirmUploadBodySchema,
   dashboardQuerySchema,
@@ -122,6 +124,20 @@ psychologistRouter.post(
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
     const profile = await submitForHrReview(account.id);
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
+  })
+);
+
+/** F4 — respond to admin CLARIFY request (not a final rejection). */
+psychologistRouter.post(
+  "/me/application/clarification-response",
+  validateBody(clarificationResponseBodySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const profile = await submitClarificationResponse({
+      accountId: account.id,
+      message: (req.body as { message: string }).message,
+    });
     sendSuccess(res, 200, toPsychologistProfileDto(profile));
   })
 );

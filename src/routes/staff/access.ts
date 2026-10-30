@@ -36,6 +36,16 @@ staffAccessRouter.get(
       const hasPsychRole = accountHasRole(account, StaffRole.PSYCHOLOGIST);
       const hrApproved = profile?.hrApprovalStatus === PsychologistHrApprovalStatus.APPROVED;
 
+      // Final BGV / hard reject: keep session for status hub only — never clinic.
+      if (profile?.identityOnboardingBlocked) {
+        sendSuccess(res, 200, {
+          access: "APPLICANT" as const,
+          staff: toStaffMeDto(account),
+          profile: toPsychologistProfileDto(profile),
+        });
+        return;
+      }
+
       if (hasPsychRole && hrApproved && profile) {
         sendSuccess(res, 200, {
           access: "PSYCHOLOGIST" as const,

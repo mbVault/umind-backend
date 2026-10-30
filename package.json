@@ -21,6 +21,8 @@
     "supertokens:logs": "docker compose --env-file .env.docker logs -f supertokens",
     "psych:provision": "tsx scripts/provision-local-psychologist.ts",
     "psych:provision:live": "tsx scripts/provision-local-psychologist.ts --live",
+    "admin:provision": "tsx scripts/provision-local-admin.ts",
+    "admin:provision:demo": "tsx scripts/provision-local-admin.ts --email admin@gmail.com --password admin123",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit"
   },
@@ -31,6 +33,7 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
+    "livekit-server-sdk": "^2.19.2",
     "razorpay": "^2.9.8",
     "socket.io": "^4.8.4",
     "stripe": "^23.0.1",

@@ -15,13 +15,16 @@ import { validateBody, validateQuery } from "../../middleware/validate";
 import {
   createDocumentViewUrl,
   listPsychologistDocuments,
+  rejectDocumentForReupload,
   toDocumentMetaDto,
 } from "../../modules/staff/documentService";
 import { toPsychologistProfileDto } from "../../modules/staff/dtos";
+import { setApplicantNextAction } from "../../modules/staff/applicantActionService";
 import {
   approvePsychologistByHr,
   listHrPendingPsychologists,
   rejectPsychologistByHr,
+  rejectPsychologistFinalBgv,
 } from "../../modules/staff/hrApprovalService";
 import {
   decideVerificationCheck,
@@ -31,11 +34,15 @@ import {
   suspendPsychologist,
 } from "../../modules/staff/psychologistService";
 import {
+  applicantActionBodySchema,
   checkDecisionBodySchema,
+  documentRejectBodySchema,
+  finalBgvRejectBodySchema,
   hrRejectBodySchema,
   psychologistListQuerySchema,
   suspendBodySchema,
 } from "../../validators/staff";
+import { PsychologistApplicantNextAction } from "@prisma/client";
 
 export const adminPsychologistsRouter = Router();
 
@@ -133,10 +140,52 @@ adminPsychologistsRouter.post(
   validateBody(hrRejectBodySchema),
   asyncHandler(async (req, res) => {
     const { account } = (req as StaffAuthenticatedRequest).staff;
+    const body = req.body as { reason: string; allowResubmission: boolean };
     const profile = await rejectPsychologistByHr({
       psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
       reviewerAccountId: account.id,
-      reason: (req.body as { reason: string }).reason,
+      reason: body.reason,
+      allowResubmission: body.allowResubmission,
+    });
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
+  })
+);
+
+/** State 8B — confirmed final BGV failure; blocks resubmit and re-onboarding. */
+adminPsychologistsRouter.post(
+  "/:psychologistId/final-bgv-reject",
+  requireAdminPermission("psychologist.verify"),
+  validateBody(finalBgvRejectBodySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const profile = await rejectPsychologistFinalBgv({
+      psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
+      reviewerAccountId: account.id,
+      applicantSafeReason: (req.body as { applicantSafeReason: string }).applicantSafeReason,
+    });
+    sendSuccess(res, 200, toPsychologistProfileDto(profile));
+  })
+);
+
+/**
+ * Explicit applicant CTA driver (F4). Prefer this over inferring from free-text.
+ * Examples: CLARIFY, CONTACT_SUPPORT, RESUBMIT, NONE, WAIT, UPLOAD_DOC.
+ */
+adminPsychologistsRouter.post(
+  "/:psychologistId/applicant-action",
+  requireAdminPermission("psychologist.verify"),
+  validateBody(applicantActionBodySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const body = req.body as {
+      nextAction: PsychologistApplicantNextAction;
+      applicantSafeMessage: string;
+    };
+    const profile = await setApplicantNextAction({
+      psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
+      reviewerAccountId: account.id,
+      nextAction: body.nextAction,
+      applicantSafeMessage: body.applicantSafeMessage,
     });
     sendSuccess(res, 200, toPsychologistProfileDto(profile));
   })
@@ -183,6 +232,23 @@ adminPsychologistsRouter.post(
       viewUrl: result.url,
       expiresAt: result.expiresAt.toISOString(),
     });
+  })
+);
+
+/** State 3 — reject one document; application stays open. */
+adminPsychologistsRouter.post(
+  "/:psychologistId/documents/:documentId/reject",
+  requireAdminPermission("psychologist.verify"),
+  validateBody(documentRejectBodySchema),
+  asyncHandler(async (req, res) => {
+    const { account } = (req as StaffAuthenticatedRequest).staff;
+    const doc = await rejectDocumentForReupload({
+      psychologistProfileId: param(req.params.psychologistId, "psychologistId"),
+      documentId: param(req.params.documentId, "documentId"),
+      actorAccountId: account.id,
+      applicantSafeReason: (req.body as { applicantSafeReason: string }).applicantSafeReason,
+    });
+    sendSuccess(res, 200, toDocumentMetaDto(doc));
   })
 );
 

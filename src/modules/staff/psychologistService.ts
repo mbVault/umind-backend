@@ -3,7 +3,9 @@ import {
   DocumentStatus,
   Prisma,
   PsychologistAccountStatus,
+  PsychologistApplicantNextAction,
   PsychologistDocumentKind,
+  PsychologistHrApprovalStatus,
   PsychologistOnboardingStep,
   PsychologistPresence,
   PsychologistPublicationStatus,
@@ -51,6 +53,20 @@ export const upsertApplicationDraft = async (
   }
 ) => {
   const profile = await getOrCreatePsychologistProfile(accountId);
+
+  if (
+    profile.identityOnboardingBlocked ||
+    profile.applicantNextAction === PsychologistApplicantNextAction.NONE
+  ) {
+    fail(403, "This application was finally rejected and cannot be edited");
+  }
+
+  if (
+    profile.hrApprovalStatus === PsychologistHrApprovalStatus.REJECTED &&
+    profile.applicantNextAction !== PsychologistApplicantNextAction.RESUBMIT
+  ) {
+    fail(403, "Resubmission is not permitted for this application");
+  }
 
   if (
     profile.publicationStatus === PsychologistPublicationStatus.LIVE ||
@@ -308,7 +324,20 @@ export const decideVerificationCheck = async (
 
     await tx.psychologistProfile.update({
       where: { id: psychologistId },
-      data: { publicationStatus },
+      data: {
+        publicationStatus,
+        ...(anyNeedsAttention
+          ? {
+              applicantNextAction: PsychologistApplicantNextAction.CLARIFY,
+              applicantMessage: reason?.trim()?.slice(0, 500) || null,
+            }
+          : allVerified
+            ? {
+                applicantNextAction: PsychologistApplicantNextAction.WAIT,
+                applicantMessage: null,
+              }
+            : {}),
+      },
     });
 
     await writeAuditLog({

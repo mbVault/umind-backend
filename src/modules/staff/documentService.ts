@@ -1,4 +1,9 @@
-import { DocumentStatus, PsychologistDocumentKind, VerificationCheckStatus } from "@prisma/client";
+import {
+  DocumentStatus,
+  PsychologistApplicantNextAction,
+  PsychologistDocumentKind,
+  VerificationCheckStatus,
+} from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/prisma";
 import { fail } from "../../lib/errors";
@@ -185,6 +190,22 @@ export const confirmReplacement = async (input: {
       });
     }
 
+    const stillNeedsReupload = await tx.psychologistDocument.count({
+      where: {
+        psychologistProfileId: input.psychologistProfileId,
+        status: DocumentStatus.REJECTED_NEED_REUPLOAD,
+      },
+    });
+    if (stillNeedsReupload === 0) {
+      await tx.psychologistProfile.update({
+        where: { id: input.psychologistProfileId },
+        data: {
+          applicantNextAction: PsychologistApplicantNextAction.WAIT,
+          applicantMessage: null,
+        },
+      });
+    }
+
     return created;
   });
 };
@@ -205,6 +226,60 @@ const relatedChecksForDocumentKind = (kind: PsychologistDocumentKind) => {
     default:
       return [];
   }
+};
+
+/** Admin marks a document as needing re-upload (State 3). Does not reject the application. */
+export const rejectDocumentForReupload = async (input: {
+  psychologistProfileId: string;
+  documentId: string;
+  actorAccountId: string;
+  applicantSafeReason: string;
+}) => {
+  const doc = await prisma.psychologistDocument.findFirst({
+    where: { id: input.documentId, psychologistProfileId: input.psychologistProfileId },
+  });
+  if (!doc) fail(404, "Document not found");
+  if (doc.status === DocumentStatus.REPLACED) {
+    fail(409, "Document was already replaced; reject the current version");
+  }
+  if (doc.status === DocumentStatus.PENDING_UPLOAD) {
+    fail(409, "Document has not been uploaded yet");
+  }
+
+  const reason = input.applicantSafeReason.slice(0, 500);
+  const updated = await prisma.$transaction(async (tx) => {
+    const document = await tx.psychologistDocument.update({
+      where: { id: doc.id },
+      data: {
+        status: DocumentStatus.REJECTED_NEED_REUPLOAD,
+        rejectionReason: reason,
+      },
+    });
+
+    await tx.psychologistProfile.update({
+      where: { id: input.psychologistProfileId },
+      data: {
+        applicantNextAction: PsychologistApplicantNextAction.UPLOAD_DOC,
+        applicantMessage: reason,
+      },
+    });
+
+    return document;
+  });
+
+  await writeAuditLog({
+    actorAccountId: input.actorAccountId,
+    action: "DOCUMENT_REJECTED_NEED_REUPLOAD",
+    targetType: "PsychologistDocument",
+    targetId: doc.id,
+    metadata: {
+      psychologistProfileId: input.psychologistProfileId,
+      kind: doc.kind,
+      reason: reason.slice(0, 200),
+    },
+  });
+
+  return updated;
 };
 
 export const createDocumentViewUrl = async (input: {

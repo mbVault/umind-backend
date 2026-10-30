@@ -31,6 +31,10 @@ export const toPsychologistProfileDto = (profile: {
   applicationSubmittedAt: Date | null;
   hrApprovalStatus?: string;
   hrRejectionReason?: string | null;
+  applicantNextAction?: string;
+  applicantMessage?: string | null;
+  identityOnboardingBlocked?: boolean;
+  finalRejectionAt?: Date | null;
   publicationStatus: string;
   accountStatus: string;
   publishedAt: Date | null;
@@ -63,6 +67,10 @@ export const toPsychologistProfileDto = (profile: {
   applicationSubmittedAt: profile.applicationSubmittedAt?.toISOString() ?? null,
   hrApprovalStatus: profile.hrApprovalStatus ?? "PENDING_APPROVAL",
   hrRejectionReason: profile.hrRejectionReason ?? null,
+  applicantNextAction: profile.applicantNextAction ?? "WAIT",
+  applicantMessage: profile.applicantMessage ?? null,
+  identityOnboardingBlocked: profile.identityOnboardingBlocked ?? false,
+  finalRejectionAt: profile.finalRejectionAt?.toISOString() ?? null,
   publicationStatus: profile.publicationStatus,
   accountStatus: profile.accountStatus,
   publishedAt: profile.publishedAt?.toISOString() ?? null,

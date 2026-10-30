@@ -27,6 +27,33 @@ export const applicationBodySchema = z.object({
 export const hrRejectBodySchema = z
   .object({
     reason: z.string().min(3).max(500),
+    /** Explicit 8A vs non-resubmittable — required; do not infer from reason text. */
+    allowResubmission: z.boolean(),
+  })
+  .strict();
+
+export const finalBgvRejectBodySchema = z
+  .object({
+    applicantSafeReason: z.string().min(3).max(500),
+  })
+  .strict();
+
+export const documentRejectBodySchema = z
+  .object({
+    applicantSafeReason: z.string().min(3).max(500),
+  })
+  .strict();
+
+export const applicantActionBodySchema = z
+  .object({
+    nextAction: z.enum(["WAIT", "RESUBMIT", "UPLOAD_DOC", "CLARIFY", "CONTACT_SUPPORT", "NONE"]),
+    applicantSafeMessage: z.string().min(3).max(500),
+  })
+  .strict();
+
+export const clarificationResponseBodySchema = z
+  .object({
+    message: z.string().min(3).max(500),
   })
   .strict();
 
